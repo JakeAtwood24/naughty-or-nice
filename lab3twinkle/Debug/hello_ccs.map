@@ -1,0 +1,282 @@
+******************************************************************************
+                  TI ARM Linker PC v20.2.7                     
+******************************************************************************
+>> Linked Thu Mar 26 19:04:43 2026
+
+OUTPUT FILE NAME:   <lab3twinkle.out>
+ENTRY POINT SYMBOL: "_c_int00_noargs"  address: 00001755
+
+
+MEMORY CONFIGURATION
+
+         name            origin    length      used     unused   attr    fill
+----------------------  --------  ---------  --------  --------  ----  --------
+  FLASH                 00000000   00040000  0000188a  0003e776  R  X
+  SRAM                  20000000   00008000  00000204  00007dfc  RW X
+
+
+SEGMENT ALLOCATION MAP
+
+run origin  load origin   length   init length attrs members
+----------  ----------- ---------- ----------- ----- -------
+00000000    00000000    00001890   00001890    r-x
+  00000000    00000000    0000026c   0000026c    r-- .intvecs
+  0000026c    0000026c    000015d6   000015d6    r-x .text
+  00001848    00001848    00000030   00000030    r-- .const
+  00001878    00001878    00000018   00000018    r-- .cinit
+20000000    20000000    00000204   00000000    rw-
+  20000000    20000000    00000200   00000000    rw- .stack
+  20000200    20000200    00000004   00000000    rw- .data
+
+
+SECTION ALLOCATION MAP
+
+ output                                  attributes/
+section   page    origin      length       input sections
+--------  ----  ----------  ----------   ----------------
+.intvecs   0    00000000    0000026c     
+                  00000000    0000026c     startup_ccs.obj (.intvecs)
+
+.text      0    0000026c    000015d6     
+                  0000026c    000009d0     rtsv7M4_T_le_v4SPD16_eabi.lib : e_pow.c.obj (.text:pow)
+                  00000c3c    000001b6                                   : fd_add_t2.asm.obj (.text)
+                  00000df2    00000002     startup_ccs.obj (.text:FaultISR)
+                  00000df4    00000158     rtsv7M4_T_le_v4SPD16_eabi.lib : e_sqrt.c.obj (.text:sqrt)
+                  00000f4c    00000136                                   : fd_div_t2.asm.obj (.text)
+                  00001082    00000002     startup_ccs.obj (.text:IntDefaultHandler)
+                  00001084    00000110     rtsv7M4_T_le_v4SPD16_eabi.lib : s_scalbn.c.obj (.text:scalbn)
+                  00001194    000000fc                                   : fd_mul_t2.asm.obj (.text)
+                  00001290    000000a6     twinkle_main.obj (.text:Play_Chorus)
+                  00001336    00000002     startup_ccs.obj (.text:NmiSR)
+                  00001338    000000a4     twinkle_main.obj (.text:note)
+                  000013dc    0000009c     rtsv7M4_T_le_v4SPD16_eabi.lib : memcpy_t2.asm.obj (.text)
+                  00001478    00000088     twinkle_main.obj (.text:PWM_Init)
+                  00001500    00000086     rtsv7M4_T_le_v4SPD16_eabi.lib : fd_cmp_t2.asm.obj (.text:__aeabi_cdcmple)
+                  00001586    00000086                                   : fd_cmp_t2.asm.obj (.text:__aeabi_cdrcmple)
+                  0000160c    00000068                                   : copy_decompress_lzss.c.obj (.text:decompress:lzss:__TI_decompress_lzss)
+                  00001674    00000056     twinkle_main.obj (.text:Play_Bridge)
+                  000016ca    00000002     --HOLE-- [fill = 0]
+                  000016cc    00000044     rtsv7M4_T_le_v4SPD16_eabi.lib : autoinit.c.obj (.text:__TI_auto_init_nobinit_nopinit:__TI_auto_init_nobinit_nopinit)
+                  00001710    00000044                                   : fd_tou_t2.asm.obj (.text)
+                  00001754    00000034                                   : boot_cortex_m.c.obj (.text:_c_int00_noargs:_c_int00_noargs)
+                  00001788    0000002e                                   : i_tofd_t2.asm.obj (.text)
+                  000017b6    00000002     --HOLE-- [fill = 0]
+                  000017b8    0000001c     twinkle_main.obj (.text:SysTick_Wait)
+                  000017d4    0000001a     rtsv7M4_T_le_v4SPD16_eabi.lib : s_copysign.c.obj (.text:copysign)
+                  000017ee    00000002     --HOLE-- [fill = 0]
+                  000017f0    00000018     twinkle_main.obj (.text:main)
+                  00001808    00000014     twinkle_main.obj (.text:twinkle)
+                  0000181c    0000000e     rtsv7M4_T_le_v4SPD16_eabi.lib : copy_decompress_none.c.obj (.text:decompress:none:__TI_decompress_none)
+                  0000182a    00000002     --HOLE-- [fill = 0]
+                  0000182c    00000008                                   : errno.c.obj (.text:__aeabi_errno_addr)
+                  00001834    00000006     startup_ccs.obj (.text:ResetISR)
+                  0000183a    00000004     rtsv7M4_T_le_v4SPD16_eabi.lib : pre_init.c.obj (.text:_system_pre_init)
+                  0000183e    00000004                                   : exit.c.obj (.text:abort:abort)
+
+.const     0    00001848    00000030     
+                  00001848    00000030     rtsv7M4_T_le_v4SPD16_eabi.lib : e_pow.c.obj (.const:$O1$$)
+
+.cinit     0    00001878    00000018     
+                  00001878    00000008     (__TI_handler_table)
+                  00001880    00000007     (.cinit..data.load) [load image, compression = lzss]
+                  00001887    00000001     --HOLE-- [fill = 0]
+                  00001888    00000008     (__TI_cinit_table)
+
+.init_array 
+*          0    00000000    00000000     UNINITIALIZED
+
+.data      0    20000200    00000004     UNINITIALIZED
+                  20000200    00000004     rtsv7M4_T_le_v4SPD16_eabi.lib : errno.c.obj (.data)
+
+.stack     0    20000000    00000200     UNINITIALIZED
+                  20000000    00000004     rtsv7M4_T_le_v4SPD16_eabi.lib : boot_cortex_m.c.obj (.stack)
+                  20000004    000001fc     --HOLE--
+
+__llvm_prf_cnts 
+*          0    20000000    00000000     UNINITIALIZED
+
+.binit     0    00000000    00000000     
+
+MODULE SUMMARY
+
+       Module                       code   ro data   rw data
+       ------                       ----   -------   -------
+    .\
+       startup_ccs.obj              12     620       0      
+       twinkle_main.obj             624    0         0      
+    +--+----------------------------+------+---------+---------+
+       Total:                       636    620       0      
+                                                            
+    C:\Users\4jake\OneDrive\Desktop\ti-cgt-arm_20.2.7.LTS\lib\rtsv7M4_T_le_v4SPD16_eabi.lib
+       e_pow.c.obj                  2512   48        0      
+       fd_add_t2.asm.obj            438    0         0      
+       e_sqrt.c.obj                 344    0         0      
+       fd_div_t2.asm.obj            310    0         0      
+       s_scalbn.c.obj               272    0         0      
+       fd_cmp_t2.asm.obj            268    0         0      
+       fd_mul_t2.asm.obj            252    0         0      
+       memcpy_t2.asm.obj            156    0         0      
+       copy_decompress_lzss.c.obj   104    0         0      
+       autoinit.c.obj               68     0         0      
+       fd_tou_t2.asm.obj            68     0         0      
+       boot_cortex_m.c.obj          52     0         0      
+       i_tofd_t2.asm.obj            46     0         0      
+       s_copysign.c.obj             26     0         0      
+       copy_decompress_none.c.obj   14     0         0      
+       errno.c.obj                  8      0         4      
+       exit.c.obj                   4      0         0      
+       pre_init.c.obj               4      0         0      
+    +--+----------------------------+------+---------+---------+
+       Total:                       4946   48        4      
+                                                            
+       Stack:                       0      0         512    
+       Linker Generated:            0      23        0      
+    +--+----------------------------+------+---------+---------+
+       Grand Total:                 5582   691       516    
+
+
+LINKER GENERATED COPY TABLES
+
+__TI_cinit_table @ 00001888 records: 1, size/record: 8, table size: 8
+	.data: load addr=00001880, load size=00000007 bytes, run addr=20000200, run size=00000004 bytes, compression=lzss
+
+
+LINKER GENERATED HANDLER TABLE
+
+__TI_handler_table @ 00001878 records: 2, size/record: 4, table size: 8
+	index: 0, handler: __TI_decompress_lzss
+	index: 1, handler: __TI_decompress_none
+
+
+GLOBAL SYMBOLS: SORTED ALPHABETICALLY BY Name 
+
+address   name                          
+-------   ----                          
+0000183f  C$$EXIT                       
+00001479  PWM_Init                      
+00001675  Play_Bridge                   
+00001291  Play_Chorus                   
+00001835  ResetISR                      
+000017b9  SysTick_Wait                  
+20000200  __STACK_END                   
+00000200  __STACK_SIZE                  
+20000200  __STACK_TOP                   
+00001888  __TI_CINIT_Base               
+00001890  __TI_CINIT_Limit              
+00001878  __TI_Handler_Table_Base       
+00001880  __TI_Handler_Table_Limit      
+000016cd  __TI_auto_init_nobinit_nopinit
+0000160d  __TI_decompress_lzss          
+0000181d  __TI_decompress_none          
+ffffffff  __TI_pprof_out_hndl           
+ffffffff  __TI_prof_data_size           
+ffffffff  __TI_prof_data_start          
+00000000  __TI_static_base__            
+00001501  __aeabi_cdcmpeq               
+00001501  __aeabi_cdcmple               
+00001587  __aeabi_cdrcmple              
+00001711  __aeabi_d2uiz                 
+00000c47  __aeabi_dadd                  
+00000f4d  __aeabi_ddiv                  
+00001195  __aeabi_dmul                  
+00000c3d  __aeabi_dsub                  
+0000182d  __aeabi_errno_addr            
+00001789  __aeabi_i2d                   
+000013dd  __aeabi_memcpy                
+000013dd  __aeabi_memcpy4               
+000013dd  __aeabi_memcpy8               
+ffffffff  __binit__                     
+ffffffff  __c_args__                    
+UNDEFED   __mpu_init                    
+20000000  __stack                       
+20000000  __start___llvm_prf_cnts       
+20000000  __stop___llvm_prf_cnts        
+00001755  _c_int00_noargs               
+UNDEFED   _system_post_cinit            
+0000183b  _system_pre_init              
+0000183f  abort                         
+ffffffff  binit                         
+000017d5  copysign                      
+000017d5  copysignl                     
+20000200  errno                         
+00000000  g_pfnVectors                  
+00001085  ldexp                         
+00001085  ldexpl                        
+000017f1  main                          
+000013dd  memcpy                        
+00001339  note                          
+0000026d  pow                           
+0000026d  powl                          
+00001085  scalbn                        
+00001085  scalbnl                       
+00000df5  sqrt                          
+00000df5  sqrtl                         
+00001809  twinkle                       
+
+
+GLOBAL SYMBOLS: SORTED BY Symbol Address 
+
+address   name                          
+-------   ----                          
+00000000  __TI_static_base__            
+00000000  g_pfnVectors                  
+00000200  __STACK_SIZE                  
+0000026d  pow                           
+0000026d  powl                          
+00000c3d  __aeabi_dsub                  
+00000c47  __aeabi_dadd                  
+00000df5  sqrt                          
+00000df5  sqrtl                         
+00000f4d  __aeabi_ddiv                  
+00001085  ldexp                         
+00001085  ldexpl                        
+00001085  scalbn                        
+00001085  scalbnl                       
+00001195  __aeabi_dmul                  
+00001291  Play_Chorus                   
+00001339  note                          
+000013dd  __aeabi_memcpy                
+000013dd  __aeabi_memcpy4               
+000013dd  __aeabi_memcpy8               
+000013dd  memcpy                        
+00001479  PWM_Init                      
+00001501  __aeabi_cdcmpeq               
+00001501  __aeabi_cdcmple               
+00001587  __aeabi_cdrcmple              
+0000160d  __TI_decompress_lzss          
+00001675  Play_Bridge                   
+000016cd  __TI_auto_init_nobinit_nopinit
+00001711  __aeabi_d2uiz                 
+00001755  _c_int00_noargs               
+00001789  __aeabi_i2d                   
+000017b9  SysTick_Wait                  
+000017d5  copysign                      
+000017d5  copysignl                     
+000017f1  main                          
+00001809  twinkle                       
+0000181d  __TI_decompress_none          
+0000182d  __aeabi_errno_addr            
+00001835  ResetISR                      
+0000183b  _system_pre_init              
+0000183f  C$$EXIT                       
+0000183f  abort                         
+00001878  __TI_Handler_Table_Base       
+00001880  __TI_Handler_Table_Limit      
+00001888  __TI_CINIT_Base               
+00001890  __TI_CINIT_Limit              
+20000000  __stack                       
+20000000  __start___llvm_prf_cnts       
+20000000  __stop___llvm_prf_cnts        
+20000200  __STACK_END                   
+20000200  __STACK_TOP                   
+20000200  errno                         
+ffffffff  __TI_pprof_out_hndl           
+ffffffff  __TI_prof_data_size           
+ffffffff  __TI_prof_data_start          
+ffffffff  __binit__                     
+ffffffff  __c_args__                    
+ffffffff  binit                         
+UNDEFED   __mpu_init                    
+UNDEFED   _system_post_cinit            
+
+[60 symbols]

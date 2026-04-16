@@ -1,0 +1,6 @@
+"./startup_ccs.obj"
+"./twinkle_main.obj"
+"./utils/uartstdio.obj"
+"../hello_ccs.cmd"
+-l"C:/ti/TivaWare_C_Series-2.2.0.295/driverlib/ccs/Debug/driverlib.lib"
+-llibc.a

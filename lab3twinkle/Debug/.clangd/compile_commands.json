@@ -1,0 +1,17 @@
+[
+   {
+      "directory" : "C:/Users/4jake/workspace_ccstheia/lab3twinkle/Debug",
+      "command"   : "clang++ -I\"C:/Users/4jake/workspace_ccstheia/lab3twinkle\" -I\"C:/ti/TivaWare_C_Series-2.2.0.295\" -I\"C:/Users/4jake/OneDrive/Desktop/ti-cgt-arm_20.2.7.LTS/include\" -Dccs=\"ccs\" -DPART_TM4C123GH6PM -DTARGET_IS_TM4C123_RB1 -xc",
+      "file"      : "C:/Users/4jake/workspace_ccstheia/lab3twinkle/startup_ccs.c"
+   },
+   {
+      "directory" : "C:/Users/4jake/workspace_ccstheia/lab3twinkle/Debug",
+      "command"   : "clang++ -I\"C:/Users/4jake/workspace_ccstheia/lab3twinkle\" -I\"C:/ti/TivaWare_C_Series-2.2.0.295\" -I\"C:/Users/4jake/OneDrive/Desktop/ti-cgt-arm_20.2.7.LTS/include\" -Dccs=\"ccs\" -DPART_TM4C123GH6PM -DTARGET_IS_TM4C123_RB1 -xc",
+      "file"      : "C:/ti/TivaWare_C_Series-2.2.0.295/utils/uartstdio.c"
+   },
+   {
+      "directory" : "C:/Users/4jake/workspace_ccstheia/lab3twinkle/Debug",
+      "command"   : "clang++ -I\"C:/Users/4jake/workspace_ccstheia/lab3twinkle\" -I\"C:/ti/TivaWare_C_Series-2.2.0.295\" -I\"C:/Users/4jake/OneDrive/Desktop/ti-cgt-arm_20.2.7.LTS/include\" -Dccs=\"ccs\" -DPART_TM4C123GH6PM -DTARGET_IS_TM4C123_RB1 -xc",
+      "file"      : "C:/Users/4jake/workspace_ccstheia/lab3twinkle/twinkle_main.c"
+   }
+]
