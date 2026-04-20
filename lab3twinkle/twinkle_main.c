@@ -104,6 +104,7 @@ void Play_Bridge(void) {
     note(note_D, HALF);
 }
 
+
 // The song has a mirrored structure, so the chorus plays at the beggining and end, and the bridge twice inbetween.
 void twinkle(void) {
     Play_Chorus();
