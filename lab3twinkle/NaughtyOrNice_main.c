@@ -11,6 +11,12 @@
 #define GPIO_PORTB_AMSEL_R (*((volatile uint32_t *)0x40005528)) // Analog mode
 #define GPIO_PORTB_PCTL_R (*((volatile uint32_t *)0x4000552C)) // Port control
 
+// Andy's Modification
+// GPIO Port E (External LEDs on PE0, PE1, PE2, PE3)
+#define GPIO_PORTE_DATA_R   (*((volatile uint32_t *)0x400243FC))
+#define GPIO_PORTE_DIR_R    (*((volatile uint32_t *)0x40024400))
+#define GPIO_PORTE_DEN_R    (*((volatile uint32_t *)0x4002451C))
+
 // PWM Module 0, Generator 0 registers (base: 0x40028000)
 #define PWM0_ENABLE_R (*((volatile uint32_t *)0x40028008)) // PWM output enable
 #define PWM0_0_CTL_R (*((volatile uint32_t *)0x40028040)) // Generator control
@@ -40,17 +46,30 @@
 #define QUARTER 0.5 // This ends up being .5 seconds, which is a quarter note at 120 bpm
 #define HALF    1.0 // This ends up being 1 second, which is just a half note at 120 bpm
 
+// Andy's Modification
+// LED bitmask patterns
+#define LED1 0x01 // PE0
+#define LED2 0x02 // PE1
+#define LED3 0x04 // PE2
+#define LED4 0x08 // PE3
+#define ALL_OFF 0x00
+
+// Andy Modified
+//Modified PWM_Init to take LEDs ports
 void PWM_Init(void) {
-  SYSCTL_RCGCGPIO_R |= 0x02; // Enable clock for Port B
+  SYSCTL_RCGCGPIO_R |= 0x12; // Enable clock for Port B (For Music), Port E (For LEDs)
   SYSCTL_RCGCPWM_R |= 0x01; // Enable clock for PWM Module 0
-  while ((SYSCTL_RCGCGPIO_R & 0x02) == 0) {} // Wait for clock
-  while ((SYSCTL_RCGCPWM_R & 0x01) == 0) {} // Wait for clock
+  while ((SYSCTL_RCGCGPIO_R & 0x12) == 0) {} //Wait for Clock
 
   // Configure PB6 as PWM output (alternate function 4 = M0PWM0)
   GPIO_PORTB_AFSEL_R |= 0x40; // Enable alt function on PB6
   GPIO_PORTB_PCTL_R = (GPIO_PORTB_PCTL_R & 0xF0FFFFFF) | 0x04000000; // AF4
   GPIO_PORTB_DEN_R |= 0x40; // Enable digital I/O on PB6
   GPIO_PORTB_AMSEL_R &= ~0x40; // Disable analog on PB6
+
+  // Configure Port E (PE0-PE3 for LEDs)
+    GPIO_PORTE_DIR_R |= 0x0F; // PE0-PE3 as output
+    GPIO_PORTE_DEN_R |= 0x0F; // Enable digital
 
   // PWM generator 0: count down, 440 Hz, 50% duty
   PWM0_0_CTL_R = 0; // Disable during setup
@@ -59,6 +78,7 @@ void PWM_Init(void) {
   PWM0_0_CMPA_R = PWM0_0_LOAD_R / 2; // 50% duty cycle
   PWM0_0_CTL_R = 1; // Enable generator
   PWM0_ENABLE_R |= 0x01; // Enable PWM output on PB6
+  
 }
 
 // SysTick delay — waits for exactly 'ticks' clock cycles
@@ -70,8 +90,9 @@ void SysTick_Wait(uint32_t reload) {
   while ((NVIC_ST_CTRL_R & COUNTFLAG) == 0) {} // Wait until count reaches 0
 }
 
+// Andy's Modified
 // keynum is piano key number (1-88), dur is duration in seconds
-void note(int keynum, float dur) {
+void note(int keynum, float dur, uint32_t led_mask) {
   uint32_t freq  = (uint32_t)(440.0 * pow(2.0, (keynum - 49) / 12.0)); // Frequency from key number
   uint32_t ticks = (uint32_t)(dur * SYSCLK_HZ); // Convert seconds to clock ticks
 
@@ -84,24 +105,36 @@ void note(int keynum, float dur) {
   // Brief silence between notes so they sound distinct (Everything will sound like a half note if this is not done)
   PWM0_0_CMPA_R = PWM0_0_LOAD_R; // 0% duty = silence
   SysTick_Wait((uint32_t)(0.05f * SYSCLK_HZ)); // Just wanted a brief silence to differentiate between the notes
+
+  // Turn ON LEDs for this note
+    GPIO_PORTE_DATA_R = led_mask;
+
+    // Turn OFF LEDs and Audio during the gap
+    GPIO_PORTE_DATA_R = ALL_OFF;
+    PWM0_0_CMPA_R = PWM0_0_LOAD_R; 
+    SysTick_Wait((uint32_t)(0.05f * SYSCLK_HZ));
 }
 
+// Andy's Modified
 // I split the song into two segments, since it is a mirrored song structure (Explained further further down)
 void Play_Chorus(void) {
-    note(note_C, QUARTER); note(note_C, QUARTER);
-    note(note_G, QUARTER); note(note_G, QUARTER);
-    note(note_A, QUARTER); note(note_A, QUARTER);
-    note(note_G, HALF);
-    note(note_F, QUARTER); note(note_F, QUARTER);
-    note(note_E, QUARTER); note(note_E, QUARTER);
-    note(note_D, QUARTER); note(note_D, QUARTER);
-    note(note_C, HALF);
+    // We pass the frequency AND which LED(s) should light up
+    note(note_C, QUARTER, LED1); note(note_C, QUARTER, LED1);
+    note(note_G, QUARTER, LED2); note(note_G, QUARTER, LED2);
+    note(note_A, QUARTER, LED3); note(note_A, QUARTER, LED3);
+    note(note_G, HALF,    LED1|LED2|LED3|LED4); // Flash all on the long note
+    
+    note(note_F, QUARTER, LED4); note(note_F, QUARTER, LED4);
+    note(note_E, QUARTER, LED3); note(note_E, QUARTER, LED3);
+    note(note_D, QUARTER, LED2); note(note_D, QUARTER, LED2);
+    note(note_C, HALF,    LED1);
 }
 void Play_Bridge(void) {
-    note(note_G, QUARTER); note(note_G, QUARTER);
-    note(note_F, QUARTER); note(note_F, QUARTER);
-    note(note_E, QUARTER); note(note_E, QUARTER);
-    note(note_D, HALF);
+    // You can also alternate LEDs to create movement
+    note(note_G, QUARTER, LED1); note(note_G, QUARTER, LED2);
+    note(note_F, QUARTER, LED3); note(note_F, QUARTER, LED4);
+    note(note_E, QUARTER, LED1|LED2); note(note_E, QUARTER, LED3|LED4);
+    note(note_D, HALF,    ALL_OFF);
 }
 
 // The song has a mirrored structure, so the chorus plays at the beggining and end, and the bridge twice inbetween.
