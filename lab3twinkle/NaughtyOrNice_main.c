@@ -1,7 +1,3 @@
-/* NOTE:
-   I have not tested this code yet as my computer is having issues, but if you are reading this I will test it by the end of the day :)
-  */
-
 #include <stdint.h>
 #include <math.h>
 
@@ -180,8 +176,6 @@ SongState FSM_Tick(SongState current) {
 
         case S_ARE:        // "are" — C (half note)
             note(note_C, HALF, LED1);
-            SysTick_Wait(ticks) // Delay before restarting
-          
             return S_TWINKLE1;  // Loop back to the beginning
 
         default:
