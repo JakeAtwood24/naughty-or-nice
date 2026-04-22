@@ -21,6 +21,16 @@
 #define GPIO_PORTE_AMSEL_R (*((volatile uint32_t *)0x40024528)) // Analog mode
 #define GPIO_PORTE_PCTL_R  (*((volatile uint32_t *)0x4002452C)) // Port control
 
+//Sara's Modification
+//GPIO Port F (Button SW1)
+#define GPIO_PORTF_DATA_R (*((volatile uint32_t *)0x400253FC)) //SW1
+#define GPIO_PORTF_DIR_R (*((volatile uint32_t *)0x40025400)) // Direction register
+#define GPIO_PORTF_AFSEL_R (*((volatile uint32_t *)0x40025420)) // Alternate function
+#define GPIO_PORTF_DEN_R (*((volatile uint32_t *)0x4002551C)) // Digital enable
+#define GPIO_PORTF_PUR_R (*((volatile uint32_t *)0x40025510)) // Pull-up resistor
+#define GPIO_PORTF_LOCK_R (*((volatile uint32_t *)0x40025520)) // Lock register
+#define GPIO_PORTF_CR_R (*((volatile uint32_t *)0x40025524)) // Commit register
+
 // PWM Module 0, Generator 0 registers (base: 0x40028000)
 #define PWM0_ENABLE_R (*((volatile uint32_t *)0x40028008)) // PWM output enable
 #define PWM0_0_CTL_R (*((volatile uint32_t *)0x40028040)) // Generator control
@@ -61,6 +71,8 @@
 #define LED3 0x04 // PE2
 #define LED4 0x08 // PE3
 #define ALL_OFF 0x00
+//Sara's Modfifications
+#define SW1 0x10
 
 // Andy Modified
 //Modified PWM_Init to take LEDs ports
@@ -96,6 +108,20 @@ void SysTick_Wait(uint32_t reload) {
   NVIC_ST_CTRL_R = 0x05; // Enable + core clock, no interrupt
   while ((NVIC_ST_CTRL_R & COUNTFLAG) == 0) {} // Wait until count reaches 0
 }
+
+// Sara's Modification
+// Button input
+void PortF_Init_Buttons(void) {
+    SYSCTL_RCGCGPIO_R |= 0x20;
+    while ((SYSCTL_RCGCGPIO_R & 0x20) == 0) {}
+    GPIO_PORTF_LOCK_R = 0x4C4F434B;   // Unlock PF4 only
+    GPIO_PORTF_CR_R |= 0x10;
+    GPIO_PORTF_DIR_R &= ~0x10;        // PF4 input
+    GPIO_PORTF_AFSEL_R &= ~0x10;      // PF4 GPIO
+    GPIO_PORTF_PUR_R |= 0x10;         // Pull-up on PF4
+    GPIO_PORTF_DEN_R |= 0x10;         // Digital enable PF4
+}
+
 
 // Andy's Modified
 // keynum is piano key number, dur is duration in seconds
@@ -178,9 +204,12 @@ void deck_the_halls(void) {
 }
 
 int main(void) {
+    PortF_Init_Buttons();
     Init_All();
     while (1) {
-        deck_the_halls();
-        SysTick_Wait((2 * SYSCLK_HZ));  // Pause before repeating
+      if ((GPIO_PORTF_DATA_R & SW1) == 0) {
+        deck_the_halls(); // Play Twinkle Twinkle Little Star in full
+        SysTick_Wait((2 * SYSCLK_HZ));  // Pause before if condition is checked again
+        }
+      }
     }
-}
