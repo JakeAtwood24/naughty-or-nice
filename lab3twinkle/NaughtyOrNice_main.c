@@ -37,6 +37,7 @@
 #define SYSCLK_HZ 16000000 // 16 MHz default clock (no PLL)
 
 // Note key numbers on an 88-key piano
+#define note_LB 39
 #define note_C  40  // Middle C
 #define note_D  42
 #define note_E  44
@@ -46,8 +47,11 @@
 #define note_B  51
 #define note_HC 52  // High C
 
+// Andy's Modified
 // Quarter/half note durations in seconds, the "f" makes it a float
+#define EIGHTH 0.25
 #define QUARTER 0.5 // This ends up being .5 seconds, which is a quarter note at 120 bpm
+#define DOT_Q 0.75
 #define HALF    1.0 // This ends up being 1 second, which is just a half note at 120 bpm
 
 // Andy's Modification
@@ -117,38 +121,66 @@ void note(int keynum, float dur, uint32_t led_mask) {
 // I split the song into two segments, since it is a mirrored song structure (Explained further further down)
 // Andy: Added another parameter for both bridge and chorus for LEDs.
 // Modify the light show however.
-void Play_Chorus(void) {
-    // We pass the frequency AND which LED(s) should light up
-    // The LEDs and Music does work, confirmed on 3:02pm on 4/20/2026
-    note(note_C, QUARTER, LED1); note(note_C, QUARTER, LED1);
-    note(note_G, QUARTER, LED2); note(note_G, QUARTER, LED2);
-    note(note_A, QUARTER, LED3); note(note_A, QUARTER, LED3);
-    note(note_G, HALF,    LED1|LED2|LED3|LED4); // Flash all on the long note
+void DeckTheHalls_PhraseA(void) {
+    // "Deck the halls with boughs of holly"
+    note(note_G, DOT_Q, LED1); 
+    note(note_F, EIGHTH, LED2);
+    note(note_E, QUARTER, LED3);
+    note(note_D, QUARTER, LED4);
+    note(note_C, QUARTER, LED1);
+    note(note_D, QUARTER, LED2);
+    note(note_E, QUARTER, LED3);
+    note(note_C, QUARTER, LED4);
     
-    note(note_F, QUARTER, LED4); note(note_F, QUARTER, LED4);
-    note(note_E, QUARTER, LED3); note(note_E, QUARTER, LED3);
-    note(note_D, QUARTER, LED2); note(note_D, QUARTER, LED2);
-    note(note_C, HALF,    LED1);
-}
-void Play_Bridge(void) {
-    note(note_G, QUARTER, LED1); note(note_G, QUARTER, LED2);
-    note(note_F, QUARTER, LED3); note(note_F, QUARTER, LED4);
-    note(note_E, QUARTER, LED1|LED2); note(note_E, QUARTER, LED3|LED4);
-    note(note_D, HALF,    ALL_OFF);
+    // "Fa la la la la, la la la la"
+    note(note_D, EIGHTH, LED1|LED2);
+    note(note_E, EIGHTH, LED3|LED4);
+    note(note_F, EIGHTH, LED1|LED2);
+    note(note_D, EIGHTH, LED3|LED4);
+    note(note_E, DOT_Q, LED1|LED2|LED3|LED4);
+    note(note_D, EIGHTH, LED1|LED2|LED3|LED4);
+    note(note_C, QUARTER, LED1);
+    note(note_LB, QUARTER, LED2);
+    note(note_C, QUARTER, LED1|LED3);
+    
 }
 
-// The song has a mirrored structure, so the chorus plays at the beggining and end, and the bridge twice inbetween.
-void twinkle(void) {
-    Play_Chorus();
-    Play_Bridge();
-    Play_Bridge();
-    Play_Chorus();
+void DeckTheHalls_Bridge(void) {
+    // "Tis the season to be jolly" 
+    DeckTheHalls_PhraseA();
+
+    // "Don we now our gay apparel"
+    note(note_D, DOT_Q, LED1);
+    note(note_E, EIGHTH, LED2);
+    note(note_F, QUARTER, LED3);
+    note(note_D, QUARTER, LED4);
+    note(note_E, DOT_Q, LED1);
+    note(note_F, EIGHTH, LED2);
+    note(note_G, QUARTER, LED3);
+    note(note_D, QUARTER, LED4);
+
+    // "Fa la la, fa la la, la la la"
+    note(note_E, EIGHTH, LED1);
+    note(note_F, EIGHTH, LED2);
+    note(note_G, QUARTER, LED3);
+    note(note_A, EIGHTH, LED4);
+    note(note_B, EIGHTH, LED3);
+    note(note_HC, QUARTER, LED2|LED4);
+    note(note_B, QUARTER, LED1);
+    note(note_A, QUARTER, LED2);
+    note(note_G, HALF, LED1|LED2|LED3|LED4);
+}
+
+void deck_the_halls(void) {
+    DeckTheHalls_PhraseA();
+    DeckTheHalls_Bridge();
+    DeckTheHalls_PhraseA(); 
 }
 
 int main(void) {
     Init_All();
     while (1) {
-        twinkle(); // Play Twinkle Twinkle Little Star in full
+        deck_the_halls();
         SysTick_Wait((2 * SYSCLK_HZ));  // Pause before repeating
     }
 }
