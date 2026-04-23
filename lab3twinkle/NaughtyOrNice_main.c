@@ -1,5 +1,12 @@
 #include <stdint.h>
 #include <math.h>
+////
+//// ____________________________________
+//// IF YOU ARE RUNNING THIS PROGRAM MAKE SURE TO CHANGE PORTF IN startup_ccs.c TO GPIOPortF_Handler and have extern void GPIOPortF_Handler(void);
+//// IN THE EXTERNAL DECLARATION AT THE TOP OF PROGRAM
+//// YOU HAVE BEEN WARNED.
+//// Andy W.
+//// ___________________________________
 
 // System control registers
 #define SYSCTL_RCGCGPIO_R (*((volatile uint32_t *)0x400FE608)) // GPIO clock
@@ -167,6 +174,7 @@ void GPIOPortF_Handler(void) {
 }
 
 
+
 // Andy's Modified
 // keynum is piano key number, dur is duration in seconds
 void note(int keynum, float dur, uint32_t led_mask) {
@@ -206,76 +214,104 @@ void note(int keynum, float dur, uint32_t led_mask) {
     SysTick_Wait((uint32_t)(0.05f * SYSCLK_HZ));
 }
 
+typedef enum {
+    S_DECK_HALLS = 0,   // "Deck the halls with boughs of holly"
+    S_FA_LA_1,          // "Fa la la la la, la la la la"
+    S_TIS_SEASON,       // "Tis the season to be jolly"
+    S_FA_LA_2,          // "Fa la la la la, la la la la"
+    S_DON_WE_NOW,       // "Don we now our gay apparel"
+    S_FA_LA_3,          // "Fa la la, fa la la, la la la"
+    S_TROLL_YULE,       // "Troll the ancient Yule-tide carol"
+    S_FA_LA_4           // "Fa la la la la, la la la la"
+} SongState;
 
 // Andy's Modified
-// I split the song into two segments, since it is a mirrored song structure (Explained further further down)
-// Andy: Added another parameter for both bridge and chorus for LEDs.
-// Modify the light show however.
-void DeckTheHalls_PhraseA(void) {
-    // "Deck the halls with boughs of holly"
-    note(note_G, DOT_Q, LED1); 
-    note(note_F, EIGHTH, LED2);
-    note(note_E, QUARTER, LED3);
-    note(note_D, QUARTER, LED4);
-    note(note_C, QUARTER, LED1);
-    note(note_D, QUARTER, LED2);
-    note(note_E, QUARTER, LED3);
-    note(note_C, QUARTER, LED4);
-    
-    // "Fa la la la la, la la la la"
-    note(note_D, EIGHTH, LED1|LED2);
-    note(note_E, EIGHTH, LED3|LED4);
-    note(note_F, EIGHTH, LED1|LED2);
-    note(note_D, EIGHTH, LED3|LED4);
-    note(note_E, DOT_Q, LED1|LED2|LED3|LED4);
-    note(note_D, EIGHTH, LED1|LED2|LED3|LED4);
-    note(note_C, QUARTER, LED1);
-    note(note_LB, QUARTER, LED2);
-    note(note_C, QUARTER, LED1|LED3);
-    
-}
+SongState FSM_Tick(SongState current) {
+    switch (current) {
+        case S_DECK_HALLS:
+            note(note_G, DOT_Q, LED1); note(note_F, EIGHTH, LED2);
+            note(note_E, QUARTER, LED3); note(note_D, QUARTER, LED4);
+            note(note_C, QUARTER, LED1); note(note_D, QUARTER, LED2);
+            note(note_E, QUARTER, LED3); note(note_C, QUARTER, LED4);
+            return S_FA_LA_1;
 
-void DeckTheHalls_Bridge(void) {
-    // "Tis the season to be jolly" 
-    DeckTheHalls_PhraseA();
+        case S_FA_LA_1:
+            note(note_D, EIGHTH, LED1|LED2); note(note_E, EIGHTH, LED3|LED4);
+            note(note_F, EIGHTH, LED1|LED2); note(note_D, EIGHTH, LED3|LED4);
+            note(note_E, DOT_Q, LED1|LED2|LED3|LED4); note(note_D, EIGHTH, LED1|LED2|LED3|LED4);
+            note(note_C, QUARTER, LED1); note(note_LB, QUARTER, LED2);
+            note(note_C, QUARTER, LED1|LED3);
+            return S_TIS_SEASON;
 
-    // "Don we now our gay apparel"
-    note(note_D, DOT_Q, LED1);
-    note(note_E, EIGHTH, LED2);
-    note(note_F, QUARTER, LED3);
-    note(note_D, QUARTER, LED4);
-    note(note_E, DOT_Q, LED1);
-    note(note_F, EIGHTH, LED2);
-    note(note_G, QUARTER, LED3);
-    note(note_D, QUARTER, LED4);
+        case S_TIS_SEASON:
+            // Same melody as Deck the Halls
+            note(note_G, DOT_Q, LED1); note(note_F, EIGHTH, LED2);
+            note(note_E, QUARTER, LED3); note(note_D, QUARTER, LED4);
+            note(note_C, QUARTER, LED1); note(note_D, QUARTER, LED2);
+            note(note_E, QUARTER, LED3); note(note_C, QUARTER, LED4);
+            return S_FA_LA_2;
 
-    // "Fa la la, fa la la, la la la"
-    note(note_E, EIGHTH, LED1);
-    note(note_F, EIGHTH, LED2);
-    note(note_G, QUARTER, LED3);
-    note(note_A, EIGHTH, LED4);
-    note(note_B, EIGHTH, LED3);
-    note(note_HC, QUARTER, LED2|LED4);
-    note(note_B, QUARTER, LED1);
-    note(note_A, QUARTER, LED2);
-    note(note_G, HALF, LED1|LED2|LED3|LED4);
-}
+        case S_FA_LA_2:
+            // Repeats the Fa-La-La phrase
+            note(note_D, EIGHTH, LED1|LED2); note(note_E, EIGHTH, LED3|LED4);
+            note(note_F, EIGHTH, LED1|LED2); note(note_D, EIGHTH, LED3|LED4);
+            note(note_E, DOT_Q, LED1|LED2|LED3|LED4); note(note_D, EIGHTH, LED1|LED2|LED3|LED4);
+            note(note_C, QUARTER, LED1); note(note_LB, QUARTER, LED2);
+            note(note_C, QUARTER, LED1|LED3);
+            return S_DON_WE_NOW;
 
-void deck_the_halls(void) {
-    DeckTheHalls_PhraseA();
-    DeckTheHalls_Bridge();
-    DeckTheHalls_PhraseA(); 
+        case S_DON_WE_NOW:
+            note(note_D, DOT_Q, LED1); note(note_E, EIGHTH, LED2);
+            note(note_F, QUARTER, LED3); note(note_D, QUARTER, LED4);
+            note(note_E, DOT_Q, LED1); note(note_F, EIGHTH, LED2);
+            note(note_G, QUARTER, LED3); note(note_D, QUARTER, LED4);
+            return S_FA_LA_3;
+
+        case S_FA_LA_3:
+            note(note_E, EIGHTH, LED1); note(note_F, EIGHTH, LED2);
+            note(note_G, QUARTER, LED3); note(note_A, EIGHTH, LED4);
+            note(note_B, EIGHTH, LED3); note(note_HC, QUARTER, LED2|LED4);
+            note(note_B, QUARTER, LED1); note(note_A, QUARTER, LED2);
+            note(note_G, HALF, LED1|LED2|LED3|LED4);
+            return S_TROLL_YULE;
+
+        case S_TROLL_YULE:
+            // Final repeat of the main theme
+            note(note_G, DOT_Q, LED1); note(note_F, EIGHTH, LED2);
+            note(note_E, QUARTER, LED3); note(note_D, QUARTER, LED4);
+            note(note_C, QUARTER, LED1); note(note_D, QUARTER, LED2);
+            note(note_E, QUARTER, LED3); note(note_C, QUARTER, LED4);
+            return S_FA_LA_4;
+
+        case S_FA_LA_4:
+            // Final Fa-La-La
+            note(note_D, EIGHTH, LED1|LED2); note(note_E, EIGHTH, LED3|LED4);
+            note(note_F, EIGHTH, LED1|LED2); note(note_D, EIGHTH, LED3|LED4);
+            note(note_E, DOT_Q, LED1|LED2|LED3|LED4); note(note_D, EIGHTH, LED1|LED2|LED3|LED4);
+            note(note_C, QUARTER, LED1); note(note_LB, QUARTER, LED2);
+            note(note_C, QUARTER, LED1|LED3);
+            return S_DECK_HALLS; // Loop back to start
+
+        default:
+            return S_DECK_HALLS;
+    }
 }
 
 int main(void) {
-    __asm("    CPSIE  I");
-    Init_All();            // Setup PWM and LEDs
-   PortF_Init_Buttons(); // Setup Button with ISR
+    __asm("    CPSIE  I");      // Enable Interrupts
+    Init_All();                 // PWM/LEDs
+    PortF_Init_Buttons();       // Button + Interrupt Setup
     
+    SongState state = S_DECK_HALLS;
+
     while (1) {
+        // If the button interrupt has set is_playing to 1
         if (is_playing) {
-            deck_the_halls();
-            is_playing = 0; // Song finished, go back to idle
+            state = FSM_Tick(state);
+            // Check if song finished, if so looped back to start
+            if (state == S_DECK_HALLS) {
+                is_playing = 0; // Stop and wait for button press to restart
+            }
         }
     }
 }
