@@ -31,6 +31,15 @@
 #define GPIO_PORTF_LOCK_R (*((volatile uint32_t *)0x40025520)) // Lock register
 #define GPIO_PORTF_CR_R (*((volatile uint32_t *)0x40025524)) // Commit register
 
+// Andy's Modified
+// Port F to handle interrupt
+#define GPIO_PORTF_IS_R     (*((volatile uint32_t *)0x40025404))
+#define GPIO_PORTF_IBE_R    (*((volatile uint32_t *)0x40025408))
+#define GPIO_PORTF_IEV_R    (*((volatile uint32_t *)0x4002540C))
+#define GPIO_PORTF_IM_R     (*((volatile uint32_t *)0x40025410))
+#define GPIO_PORTF_ICR_R    (*((volatile uint32_t *)0x4002541C))
+#define NVIC_EN0_R          (*((volatile uint32_t *)0xE000E100))
+
 // PWM Module 0, Generator 0 registers (base: 0x40028000)
 #define PWM0_ENABLE_R (*((volatile uint32_t *)0x40028008)) // PWM output enable
 #define PWM0_0_CTL_R (*((volatile uint32_t *)0x40028040)) // Generator control
@@ -73,6 +82,12 @@
 #define ALL_OFF 0x00
 //Sara's Modfifications
 #define SW1 0x10
+
+// Andy's Modfications
+// State Variables 
+volatile uint8_t is_playing = 0; // 0 = Idle, 1 = Song is active
+volatile uint8_t is_paused = 0;  // 0 = Running, 1 = Frozen
+
 
 // Andy Modified
 //Modified PWM_Init to take LEDs ports
@@ -120,6 +135,35 @@ void PortF_Init_Buttons(void) {
     GPIO_PORTF_AFSEL_R &= ~0x10;      // PF4 GPIO
     GPIO_PORTF_PUR_R |= 0x10;         // Pull-up on PF4
     GPIO_PORTF_DEN_R |= 0x10;         // Digital enable PF4
+
+    // Andy's Modified
+    // Lines added to handle interrupts
+    GPIO_PORTF_IS_R  &= ~0x10;    // PF4 is edge-sensitive
+    GPIO_PORTF_IBE_R &= ~0x10;    // PF4 is not both edges
+    GPIO_PORTF_IEV_R &= ~0x10;    // PF4 falling edge event 
+    GPIO_PORTF_ICR_R  = 0x10;     // Clear any prior flag
+    GPIO_PORTF_IM_R  |= 0x10;     // Arm interrupt on PF4 
+
+    // Andy Modified
+    // Enable Port F interrupt in NVIC
+    NVIC_EN0_R |= (1 << 30);
+}
+
+// The Interrupt Service Routine
+void GPIOPortF_Handler(void) {
+    GPIO_PORTF_ICR_R = 0x10; 
+    
+    if (!is_playing) {
+        is_playing = 1;      // Start the song if it's not running
+    } else {
+        is_paused = !is_paused; 
+        
+        // Hardware response if we just paused
+        if (is_paused) {
+            PWM0_ENABLE_R &= ~0x01; 
+            GPIO_PORTE_DATA_R = 0;
+        }
+    }
 }
 
 
@@ -127,7 +171,7 @@ void PortF_Init_Buttons(void) {
 // keynum is piano key number, dur is duration in seconds
 void note(int keynum, float dur, uint32_t led_mask) {
     uint32_t freq  = (uint32_t)(440.0 * pow(2.0, (keynum - 49) / 12.0));
-    uint32_t ticks = (uint32_t)(dur * SYSCLK_HZ);
+    uint32_t total_ticks = (uint32_t)(dur * SYSCLK_HZ);
 
     // LEDs and Frequency
     GPIO_PORTE_DATA_R = led_mask; 
@@ -135,13 +179,33 @@ void note(int keynum, float dur, uint32_t led_mask) {
     PWM0_0_CMPA_R = PWM0_0_LOAD_R / 2;
     PWM0_ENABLE_R |= 0x01; // Ensure sound is on
 
-    SysTick_Wait(ticks);
+    // Andy's Modified
+    uint32_t elapsed = 0;
+    // Check state every 10ms 
+    uint32_t chunk = 160000; 
 
-    // Eliminate the high pitch in between each note
+    while (elapsed < total_ticks) {
+        if (!is_paused) {
+            SysTick_Wait(chunk);
+            elapsed += chunk;
+        } else {
+            // Stay in this loop until is_paused is toggled by the ISR
+            PWM0_ENABLE_R &= ~0x01;
+            GPIO_PORTE_DATA_R = 0;
+            while (is_paused); 
+            
+            // Restore hardware state on resume
+            PWM0_ENABLE_R |= 0x01;
+            GPIO_PORTE_DATA_R = led_mask;
+        }
+    }
+
+    // Silence in between notes
     GPIO_PORTE_DATA_R = 0;
-    PWM0_ENABLE_R &= ~0x01; // Turn off sound bit
+    PWM0_ENABLE_R &= ~0x01;
     SysTick_Wait((uint32_t)(0.05f * SYSCLK_HZ));
 }
+
 
 // Andy's Modified
 // I split the song into two segments, since it is a mirrored song structure (Explained further further down)
@@ -204,12 +268,14 @@ void deck_the_halls(void) {
 }
 
 int main(void) {
-    PortF_Init_Buttons();
-    Init_All();
+    __asm("    CPSIE  I");
+    Init_All();            // Setup PWM and LEDs
+   PortF_Init_Buttons(); // Setup Button with ISR
+    
     while (1) {
-      if ((GPIO_PORTF_DATA_R & SW1) == 0) {
-        deck_the_halls(); // Play Twinkle Twinkle Little Star in full
-        SysTick_Wait((2 * SYSCLK_HZ));  // Pause before if condition is checked again
+        if (is_playing) {
+            deck_the_halls();
+            is_playing = 0; // Song finished, go back to idle
         }
-      }
     }
+}
