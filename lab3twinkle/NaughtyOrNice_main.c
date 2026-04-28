@@ -38,6 +38,19 @@
 #define GPIO_PORTF_LOCK_R (*((volatile uint32_t *)0x40025520)) // Lock register
 #define GPIO_PORTF_CR_R (*((volatile uint32_t *)0x40025524)) // Commit register
 
+// Andy's Modifications
+// UART0 Register Defines
+#define SYSCTL_RCGCUART_R (*((volatile uint32_t *)0x400FE618))
+#define UART0_DR_R        (*((volatile uint32_t *)0x4000C000))
+#define UART0_FR_R        (*((volatile uint32_t *)0x4000C018))
+#define UART0_IBRD_R      (*((volatile uint32_t *)0x4000C024))
+#define UART0_FBRD_R      (*((volatile uint32_t *)0x4000C028))
+#define UART0_LCRH_R      (*((volatile uint32_t *)0x4000C02C))
+#define UART0_CTL_R       (*((volatile uint32_t *)0x4000C030))
+#define GPIO_PORTA_AFSEL_R (*((volatile uint32_t *)0x40004420))
+#define GPIO_PORTA_PCTL_R  (*((volatile uint32_t *)0x4000452C))
+#define GPIO_PORTA_DEN_R   (*((volatile uint32_t *)0x4000451C))
+
 // Andy's Modified
 // Port F to handle interrupt
 #define GPIO_PORTF_IS_R     (*((volatile uint32_t *)0x40025404))
@@ -54,7 +67,7 @@
 #define PWM0_0_CMPA_R (*((volatile uint32_t *)0x40028058)) // Compare A (duty)
 #define PWM0_0_GENA_R (*((volatile uint32_t *)0x40028060)) // Generator A action
 
-// SysTick registers (Cortex-M core)
+// SysTick registers 
 #define NVIC_ST_CTRL_R (*((volatile uint32_t *)0xE000E010)) // Control/Status
 #define NVIC_ST_RELOAD_R (*((volatile uint32_t *)0xE000E014)) // Reload value
 #define NVIC_ST_CURRENT_R (*((volatile uint32_t *)0xE000E018)) // Current value
@@ -90,10 +103,26 @@
 //Sara's Modfifications
 #define SW1 0x10
 
+// Moved this function to the top because the order of operation matter.
+typedef enum {
+   // Idle Song (Deck the Halls)
+    S_DECK_HALLS = 0, S_FA_LA_1, S_TIS_SEASON, S_FA_LA_2, 
+    S_DON_WE_NOW, S_FA_LA_3, S_TROLL_YULE, S_FA_LA_4,
+
+    // Naughty Song (The Grinch)
+    S_GRINCH_1 = 20, // Starting at 20 just to keep them visually separate
+    S_GRINCH_2, S_GRINCH_3, S_GRINCH_4,
+
+    // Nice Song (Jingle Bells)
+    S_JINGLE_1 = 30, // Offset to keep it organized
+    S_JINGLE_2, S_JINGLE_3, S_JINGLE_4,S_JINGLE_FINISH
+} SongState;
+
 // Andy's Modfications
-// State Variables 
+// State Variables and volatile functions
 volatile uint8_t is_playing = 0; // 0 = Idle, 1 = Song is active
 volatile uint8_t is_paused = 0;  // 0 = Running, 1 = Frozen
+volatile SongState current_state = S_DECK_HALLS; //Turn this into a global because the program needs to be able to switch on the fly.
 
 
 // Andy Modified
@@ -120,6 +149,25 @@ void Init_All(void) {
     PWM0_0_CTL_R = 0;
     PWM0_0_GENA_R = 0x8C;
     PWM0_0_CTL_R = 1;
+}
+
+// Andy's Modifications
+// UART Helper Functions
+// Just the above Init_all, I'm initalizing Port A to be strictly UART.
+void UART_Init(void) {
+    SYSCTL_RCGCUART_R |= 0x01; // Enable UART0
+    SYSCTL_RCGCGPIO_R |= 0x01; // Enable Port A
+    while((SYSCTL_RCGCGPIO_R & 0x01) == 0);
+
+    UART0_CTL_R &= ~0x01;      // Disable UART
+    UART0_IBRD_R = 8;          // 115,200 baud for 16MHz clock
+    UART0_FBRD_R = 44;
+    UART0_LCRH_R = 0x70;       // 8-bit, FIFO enabled
+    UART0_CTL_R |= 0x01;       // Enable UART
+    
+    GPIO_PORTA_AFSEL_R |= 0x03; // PA0, PA1 alt function
+    GPIO_PORTA_DEN_R |= 0x03;
+    GPIO_PORTA_PCTL_R = (GPIO_PORTA_PCTL_R & 0xFFFFFF00) + 0x00000011;
 }
 
 // SysTick delay — waits for exactly 'ticks' clock cycles
@@ -156,19 +204,50 @@ void PortF_Init_Buttons(void) {
     NVIC_EN0_R |= (1 << 30);
 }
 
+// This is the function that allows us to send sentences through the serial console
+void UART_OutString(char *pt) {
+    while(*pt) {
+        while((UART0_FR_R & 0x20) != 0); // Wait if TX FIFO full
+        UART0_DR_R = *pt++;
+    }
+}
+
 // The Interrupt Service Routine
+// Updated, 4/27/2026, Adding in the "randomness" logic here.
+// Idea: Since the MC runs so many cycles each second, the human input will act the random input. The chance of a person
+// Hitting the same number again is so low that this randomness would be okay I think. - Andy W.
 void GPIOPortF_Handler(void) {
-    GPIO_PORTF_ICR_R = 0x10; 
+    GPIO_PORTF_ICR_R = 0x10;
     
     if (!is_playing) {
-        is_playing = 1;      // Start the song if it's not running
-    } else {
-        is_paused = !is_paused; 
+        UART_OutString("\r\n[SYSTEM] Button Pressed! Analyzing soul...\r\n");
         
-        // Hardware response if we just paused
-        if (is_paused) {
-            PWM0_ENABLE_R &= ~0x01; 
-            GPIO_PORTE_DATA_R = 0;
+            // Random Logic
+            // Grab the lower bit of the SysTick timer for a 50/50 chance
+            // If we are currently in the background song (Deck the Halls)
+        if (current_state >= S_DECK_HALLS && current_state <= S_FA_LA_4) {
+            UART_OutString("\r\n[SYSTEM] Analyzing soul...\r\n");
+        
+            uint32_t rng_seed = NVIC_ST_CURRENT_R; 
+            if (rng_seed % 2 == 0) {
+                UART_OutString("[RESULT] Status: NICE. Playing Jingle Bells.\r\n");
+                current_state = S_JINGLE_1;
+            } 
+            else {
+                UART_OutString("[RESULT] Status: NAUGHTY! Playing The Grinch.\r\n");
+                current_state = S_GRINCH_1;
+            }
+            is_paused = 0; // Make sure we aren't paused when the new song starts
+        } 
+        else {
+            // If the Grinch or Nice song is already playing, toggle pause
+            is_paused = !is_paused;
+            if(is_paused){
+                UART_OutString("[LOG] Music Paused.\r\n");
+            }
+            else{
+                UART_OutString("[LOG] Music Resumed.\r\n");
+            }
         }
     }
 }
@@ -214,16 +293,6 @@ void note(int keynum, float dur, uint32_t led_mask) {
     SysTick_Wait((uint32_t)(0.05f * SYSCLK_HZ));
 }
 
-typedef enum {
-    S_DECK_HALLS = 0,   // "Deck the halls with boughs of holly"
-    S_FA_LA_1,          // "Fa la la la la, la la la la"
-    S_TIS_SEASON,       // "Tis the season to be jolly"
-    S_FA_LA_2,          // "Fa la la la la, la la la la"
-    S_DON_WE_NOW,       // "Don we now our gay apparel"
-    S_FA_LA_3,          // "Fa la la, fa la la, la la la"
-    S_TROLL_YULE,       // "Troll the ancient Yule-tide carol"
-    S_FA_LA_4           // "Fa la la la la, la la la la"
-} SongState;
 
 // Andy's Modified
 SongState FSM_Tick(SongState current) {
@@ -292,6 +361,61 @@ SongState FSM_Tick(SongState current) {
             note(note_C, QUARTER, LED1|LED3);
             return S_DECK_HALLS; // Loop back to start
 
+        // Naughty States
+        case S_GRINCH_1: // "You're a mean one..."
+            note(note_C, QUARTER, LED1|LED4);  // Start with outer LEDs
+            note(note_D, QUARTER, LED2|LED3);  // Move to inner LEDs
+            note(note_E, HALF, ALL_OFF);       // Dramatic pause
+            return S_GRINCH_2;
+
+        case S_GRINCH_2: // "...Mr. Grinch"
+            note(note_LB, DOT_Q, LED1|LED2|LED3|LED4); // Flash all for the low note
+            return S_GRINCH_3;
+
+        case S_GRINCH_3: // "You really are a heel!"
+            note(note_C, EIGHTH, LED1);
+            note(note_LB, EIGHTH, LED2);
+            note(note_C, EIGHTH, LED3);
+            note(note_LB, EIGHTH, LED4);
+            return S_GRINCH_4;
+
+        case S_GRINCH_4:
+            note(note_LB, HALF, LED1|LED4);
+            // After the song finishes, go back to Deck the Halls (Idle)
+            return S_DECK_HALLS;
+
+        case S_JINGLE_1: // "Jin-gle bells,"
+            note(note_E, QUARTER, LED1);
+            note(note_E, QUARTER, LED2);
+            note(note_E, HALF,    LED3|LED4); 
+            return S_JINGLE_2;
+
+        case S_JINGLE_2: // "Jin-gle bells,"
+            note(note_E, QUARTER, LED1);
+            note(note_E, QUARTER, LED2);
+            note(note_E, HALF,    LED3|LED4);
+            return S_JINGLE_3;
+
+        case S_JINGLE_3: // "Jin-gle all the way!"
+            note(note_E, QUARTER, LED1);
+            note(note_G, QUARTER, LED2);
+            note(note_C, QUARTER, LED3);
+            note(note_D, QUARTER, LED4);
+            note(note_E, HALF,    LED1|LED2|LED3|LED4);
+            return S_JINGLE_4;
+
+        case S_JINGLE_4: // "Oh what fun..."
+            note(note_F, QUARTER, LED1|LED2);
+            note(note_F, QUARTER, LED1|LED2);
+            note(note_F, QUARTER, LED3|LED4);
+            note(note_F, QUARTER, LED3|LED4);
+            return S_JINGLE_FINISH;
+
+        case S_JINGLE_FINISH:
+            note(note_E, QUARTER, LED1|LED3);
+            note(note_E, QUARTER, LED2|LED4);
+            return S_DECK_HALLS; // Always return to Idle/Background music
+
         default:
             return S_DECK_HALLS;
     }
@@ -300,18 +424,18 @@ SongState FSM_Tick(SongState current) {
 int main(void) {
     __asm("    CPSIE  I");      // Enable Interrupts
     Init_All();                 // PWM/LEDs
+    UART_Init();
     PortF_Init_Buttons();       // Button + Interrupt Setup
-    
-    SongState state = S_DECK_HALLS;
+
+    // Start SysTick now so it's "randomizing" in the background
+    NVIC_ST_RELOAD_R = 0x00FFFFFF; // Max 24-bit value
+    NVIC_ST_CURRENT_R = 0;        // Clear current to start count
+    NVIC_ST_CTRL_R = 0x05;        // Enable timer, core clock
 
     while (1) {
-        // If the button interrupt has set is_playing to 1
-        if (is_playing) {
-            state = FSM_Tick(state);
-            // Check if song finished, if so looped back to start
-            if (state == S_DECK_HALLS) {
-                is_playing = 0; // Stop and wait for button press to restart
-            }
+        // If we aren't paused, keep the music moving
+        if (!is_paused) {
+            current_state = FSM_Tick(current_state);
         }
     }
 }
