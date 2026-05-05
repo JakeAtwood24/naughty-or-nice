@@ -10,10 +10,6 @@
 //// YOU HAVE BEEN WARNED.
 //// Andy W.
 //// ___________________________________
-//// Hi, Andy W again, Update on May 4th 2026
-//// You will need to switch two things in startup.ccs
-//// 1st. Declare this in external declarations: extern void UART0_Handler(void);
-//// 2nd. Find the UART0 in the NVIC and replace it with: UART0_Handler
 
 // System control registers
 #define SYSCTL_RCGCGPIO_R (*((volatile uint32_t *)0x400FE608)) // GPIO clock
@@ -84,11 +80,30 @@
 #define NVIC_ST_CURRENT_R (*((volatile uint32_t *)0xE000E018)) // Current value
 #define COUNTFLAG (1U << 16) // Bit 16 of NVIC_ST_CTRL_R
 
+// DMA defines
+#define SYSCTL_RCGCDMA_R      (*((volatile uint32_t *)0x400FE60C))
+#define UDMA_CTLBASE_R        (*((volatile uint32_t *)0x400FF008))
+#define UDMA_CFG_R            (*((volatile uint32_t *)0x400FF004))
+#define UDMA_ENASET_R         (*((volatile uint32_t *)0x400FF028))
+#define UART0_DMACTL_R        (*((volatile uint32_t *)0x4000C048))
+
+#define UART0_IFLS_R (*((volatile uint32_t *)0x4000C034)) // Interrupt FIFO Level Select
+
+#define UDMA_PRIOSET_R (*((volatile uint32_t *)0x400FF038))
+
+#define UART0_ECR_R (*((volatile uint32_t *)0x4000C004))
+
+
 // Switching the dynamic memory allocation to a fixed memory allocation for efficiency and dedicated memory - Andy W.
 #define BUFFER_MAX 10
 
 
 #define SYSCLK_HZ 16000000 // 16 MHz default clock (no PLL)
+
+// Do not change any of these variables, this is what holds the DMA together.
+// The Control Table must be 1024-byte aligned!
+uint8_t ControlTable[1024] __attribute__ ((aligned(1024)));
+uint8_t dma_rx_buffer[BUFFER_MAX];
 
 // Note key numbers on an 88-key piano
 #define note_LB 39
@@ -237,17 +252,49 @@ void UART_Init(void) {
     UART0_IBRD_R = 8;          // 115,200 baud for 16MHz clock
     UART0_FBRD_R = 44;
     UART0_LCRH_R = 0x70;       // 8-bit, FIFO enabled
-
-    // Enable Receive Interrupts - Andy W
-    // These lines setup for a bidirectional UART
-    UART0_IM_R |= 0x10;        // Arm RXRIS (Receive Interrupt)
-    NVIC_EN0_R |= (1 << 5);    // UART0 is Interrupt #5 in NVIC
     
     UART0_CTL_R |= 0x01;       // Enable UART (TX and RX)
     
     GPIO_PORTA_AFSEL_R |= 0x03; // PA0, PA1 alt function
     GPIO_PORTA_DEN_R |= 0x03;
     GPIO_PORTA_PCTL_R = (GPIO_PORTA_PCTL_R & 0xFFFFFF00) + 0x00000011;
+}
+
+// Just like all the other Inits above, this function is strictally for DMA so I know where everything for DMA is initalizied at - Andy W.
+void DMA_Init(void) {
+    SYSCTL_RCGCDMA_R |= 0x01;    // Enable DMA Clock
+    while((SYSCTL_RCGCDMA_R & 0x01) == 0);
+
+    UDMA_CFG_R = 0x01;           // Enable Controller
+    UDMA_CTLBASE_R = (uint32_t)ControlTable;
+
+    // We target the "Primary" control structure for Channel 8
+    // Each entry is 16 bytes: 8 * 16 = 128 (0x80) offset
+    uint32_t *controlEntry = (uint32_t *)&ControlTable[0x80 / 4]; 
+    
+    // 1. Source End Address (UART Data Register)
+    controlEntry[0] = (uint32_t)&UART0_DR_R; 
+    // 2. Destination End Address (Last element of your buffer)
+    controlEntry[1] = (uint32_t)&dma_rx_buffer[BUFFER_MAX - 1]; 
+    // 3. Control Word: 8-bit size, Dest Inc, Basic Mode, Transfer BUFFER_MAX items
+    controlEntry[2] = (0x0 << 30) | (0x3 << 28) | (0x0 << 26) | (0x3 << 24) | 
+                      ((BUFFER_MAX - 1) << 4) | 0x1;
+
+    UDMA_ENASET_R = (1 << 8);    // Enable DMA Channel 8
+    // --------------------------------------------------
+
+    UART0_DMACTL_R |= 0x02;      // Tell UART to trigger DMA
+
+    // Set UART0 RX FIFO level to trigger DMA on 1 byte (1/8 full)
+    UART0_IFLS_R &= ~0x38; 
+    
+    // Explicitly enable DMA for RX in the UART module
+    UART0_DMACTL_R |= 0x02; 
+    
+    // Force-enable the DMA channel in case it was disabled by a previous overflow
+    UDMA_ENASET_R = (1 << 8);
+
+    UDMA_PRIOSET_R = (1 << 8); // Give UART0 RX high priority
 }
 
 // SysTick delay — waits for exactly 'ticks' clock cycles
@@ -289,24 +336,6 @@ void UART_OutString(char *pt) {
     while(*pt) {
         while((UART0_FR_R & 0x20) != 0); // Wait if TX FIFO full
         UART0_DR_R = *pt++;
-    }
-}
-
-// Andy W.
-// This function will handle all our remote operation through UART
-// Just two inputs for now "g" to set the naughty flag and "j" to set the nice flag
-void UART0_Handler(void) {
-    UART0_ICR_R = 0x10; // Clear the interrupt flag
-    
-    char c = (char)(UART0_DR_R & 0xFF); // Read the character
-    
-    if (c == 'g' || c == 'G') {
-        UART_OutString("\r\n[UART] Remote Trigger: Grinch Mode!\r\n");
-        push_buffer(&state_buffer, S_GRINCH_1);
-    } 
-    else if (c == 'j' || c == 'J') {
-        UART_OutString("\r\n[UART] Remote Trigger: Jingle Mode!\r\n");
-        push_buffer(&state_buffer, S_JINGLE_1);
     }
 }
 
@@ -358,6 +387,7 @@ void GPIOPortF_Handler(void) {
 // Andy's Modified
 // keynum is piano key number, dur is duration in seconds
 void note(int keynum, float dur, uint32_t led_mask) {
+    int i,j;
     uint32_t freq  = (uint32_t)(440.0 * pow(2.0, (keynum - 49) / 12.0));
     uint32_t total_ticks = (uint32_t)(dur * SYSCLK_HZ);
 
@@ -373,6 +403,24 @@ void note(int keynum, float dur, uint32_t led_mask) {
     uint32_t chunk = 160000; 
 
     while (elapsed < total_ticks) {
+
+        for( i = 0; i < BUFFER_MAX; i++) {
+            if(dma_rx_buffer[i] == 'G' || dma_rx_buffer[i] == 'g') {
+                UART_OutString("\r\n>>> ECHO: DMA found 'G' - Switching to Grinch!\r\n");
+                // Clear buffer so we don't loop forever
+                for( j = 0; j < BUFFER_MAX; j++) dma_rx_buffer[j] = 0;
+                // Force exit
+                PWM0_ENABLE_R &= ~0x01;
+                return; 
+            }
+            if(dma_rx_buffer[i] == 'J' || dma_rx_buffer[i] == 'j') {
+                UART_OutString("\r\n>>> ECHO: DMA found 'J' - Switching to Jingle!\r\n");
+                for( j = 0; j < BUFFER_MAX; j++) dma_rx_buffer[j] = 0;
+                PWM0_ENABLE_R &= ~0x01;
+                return;
+            }
+        }
+
         if (!is_paused) {
             SysTick_Wait(chunk);
             elapsed += chunk;
@@ -523,26 +571,34 @@ SongState FSM_Tick(SongState current) {
 }
 
 int main(void) {
-    __asm("    CPSIE  I");      // Enable Interrupts
     Init_All();                 // PWM/LEDs
     UART_Init();
+    DMA_Init();
     PortF_Init_Buttons();       // Button + Interrupt Setup
     // Old: init_buffer(&state_buffer, 10);
     init_buffer(&state_buffer);
     // Start SysTick now so it's "randomizing" in the background
+
+    __asm("    CPSIE  I");      // Enable Interrupts
+    
     NVIC_ST_RELOAD_R = 0x00FFFFFF; // Max 24-bit value
     NVIC_ST_CURRENT_R = 0;        // Clear current to start count
     NVIC_ST_CTRL_R = 0x05;        // Enable timer, core clock
 
-    while (1) {
-        // If we aren't paused, keep the music moving
-      if (!is_paused) { 
-         current_state = FSM_Tick(current_state);
-        
-        // check the input buffer for new states and overwrite if neccesary
-          if (state_buffer.size > 0) {
-            current_state = pop_buffer(&state_buffer);
-          } 
-      }
+   while (1) {
+    int j;
+    
+    if (state_buffer.size > 0) {
+        current_state = (SongState)pop_buffer(&state_buffer);
+      
+        for(j = 0; j < BUFFER_MAX; j++) dma_rx_buffer[j] = 0;
+        DMA_Init(); 
     }
+
+    if (!is_paused) { 
+        current_state = FSM_Tick(current_state);
+    }
+    
+
+}
 }
