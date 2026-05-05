@@ -1,5 +1,8 @@
 #include <stdint.h>
 #include <math.h>
+#include <stdlib.h>
+#include <stdint.h>
+#include <stdio.h>
 ////
 //// ____________________________________
 //// IF YOU ARE RUNNING THIS PROGRAM MAKE SURE TO CHANGE PORTF IN startup_ccs.c TO GPIOPortF_Handler and have extern void GPIOPortF_Handler(void);
@@ -7,6 +10,10 @@
 //// YOU HAVE BEEN WARNED.
 //// Andy W.
 //// ___________________________________
+//// Hi, Andy W again, Update on May 4th 2026
+//// You will need to switch two things in startup.ccs
+//// 1st. Declare this in external declarations: extern void UART0_Handler(void);
+//// 2nd. Find the UART0 in the NVIC and replace it with: UART0_Handler
 
 // System control registers
 #define SYSCTL_RCGCGPIO_R (*((volatile uint32_t *)0x400FE608)) // GPIO clock
@@ -50,6 +57,10 @@
 #define GPIO_PORTA_AFSEL_R (*((volatile uint32_t *)0x40004420))
 #define GPIO_PORTA_PCTL_R  (*((volatile uint32_t *)0x4000452C))
 #define GPIO_PORTA_DEN_R   (*((volatile uint32_t *)0x4000451C))
+// New UART Registers
+#define UART0_IM_R        (*((volatile uint32_t *)0x4000C038)) // Interrupt Mask
+#define UART0_ICR_R       (*((volatile uint32_t *)0x4000C044)) // Interrupt Clear
+#define UART0_MIS_R       (*((volatile uint32_t *)0x4000C040)) // Masked Interrupt Status 
 
 // Andy's Modified
 // Port F to handle interrupt
@@ -72,6 +83,10 @@
 #define NVIC_ST_RELOAD_R (*((volatile uint32_t *)0xE000E014)) // Reload value
 #define NVIC_ST_CURRENT_R (*((volatile uint32_t *)0xE000E018)) // Current value
 #define COUNTFLAG (1U << 16) // Bit 16 of NVIC_ST_CTRL_R
+
+// Switching the dynamic memory allocation to a fixed memory allocation for efficiency and dedicated memory - Andy W.
+#define BUFFER_MAX 10
+
 
 #define SYSCLK_HZ 16000000 // 16 MHz default clock (no PLL)
 
@@ -118,11 +133,68 @@ typedef enum {
     S_JINGLE_2, S_JINGLE_3, S_JINGLE_4,S_JINGLE_FINISH
 } SongState;
 
+
+
 // Andy's Modfications
 // State Variables and volatile functions
 volatile uint8_t is_playing = 0; // 0 = Idle, 1 = Song is active
 volatile uint8_t is_paused = 0;  // 0 = Running, 1 = Frozen
 volatile SongState current_state = S_DECK_HALLS; //Turn this into a global because the program needs to be able to switch on the fly.
+
+//____________________________________
+//Fixed-sized Queue-based Buffer + Helper functions
+
+// Jordan's Implemenation 
+// Andy's Modfication
+typedef struct {
+    size_t MAX_SIZE;
+    volatile int arr[BUFFER_MAX]; // Changed from pointer to fixed array
+    size_t size; 
+} buffer;
+
+void init_buffer(volatile buffer* buf) {
+    buf->MAX_SIZE = BUFFER_MAX; 
+    buf->size = 0;
+    // No malloc needed with fixed memory
+}
+
+// push_buffer and pop_buffer stay almost identical, 
+// but they are now safer because the memory is locked in.
+void push_buffer(volatile buffer* buf, int value) {
+    if (buf->size < buf->MAX_SIZE) {
+        buf->arr[buf->size] = value; 
+        buf->size++;
+    }
+}
+
+uint8_t pop_buffer(volatile buffer* buf) {
+    if (buf->size == 0) return 254; // Using a literal instead of INT8_MAX for simplicity
+    
+    int first = buf->arr[0]; 
+
+    // Shift elements
+    size_t i;
+    for (i = 0; i < (buf->size - 1); i++) {
+        buf->arr[i] = buf->arr[i + 1]; 
+    }
+
+    buf->size--;
+    return (uint8_t)first;  
+}
+
+void clear_buffer ( volatile buffer* buf) {
+    buf->size = 0;
+}
+
+void cleanup_buffer ( volatile buffer* buf) {
+    buf->size = 0;
+    buf->MAX_SIZE = 0; 
+    free(buf);
+}
+
+//_______________________
+
+ volatile buffer state_buffer; 
 
 
 // Andy Modified
@@ -149,6 +221,8 @@ void Init_All(void) {
     PWM0_0_CTL_R = 0;
     PWM0_0_GENA_R = 0x8C;
     PWM0_0_CTL_R = 1;
+
+
 }
 
 // Andy's Modifications
@@ -163,7 +237,13 @@ void UART_Init(void) {
     UART0_IBRD_R = 8;          // 115,200 baud for 16MHz clock
     UART0_FBRD_R = 44;
     UART0_LCRH_R = 0x70;       // 8-bit, FIFO enabled
-    UART0_CTL_R |= 0x01;       // Enable UART
+
+    // Enable Receive Interrupts - Andy W
+    // These lines setup for a bidirectional UART
+    UART0_IM_R |= 0x10;        // Arm RXRIS (Receive Interrupt)
+    NVIC_EN0_R |= (1 << 5);    // UART0 is Interrupt #5 in NVIC
+    
+    UART0_CTL_R |= 0x01;       // Enable UART (TX and RX)
     
     GPIO_PORTA_AFSEL_R |= 0x03; // PA0, PA1 alt function
     GPIO_PORTA_DEN_R |= 0x03;
@@ -212,30 +292,50 @@ void UART_OutString(char *pt) {
     }
 }
 
+// Andy W.
+// This function will handle all our remote operation through UART
+// Just two inputs for now "g" to set the naughty flag and "j" to set the nice flag
+void UART0_Handler(void) {
+    UART0_ICR_R = 0x10; // Clear the interrupt flag
+    
+    char c = (char)(UART0_DR_R & 0xFF); // Read the character
+    
+    if (c == 'g' || c == 'G') {
+        UART_OutString("\r\n[UART] Remote Trigger: Grinch Mode!\r\n");
+        push_buffer(&state_buffer, S_GRINCH_1);
+    } 
+    else if (c == 'j' || c == 'J') {
+        UART_OutString("\r\n[UART] Remote Trigger: Jingle Mode!\r\n");
+        push_buffer(&state_buffer, S_JINGLE_1);
+    }
+}
+
 // The Interrupt Service Routine
 // Updated, 4/27/2026, Adding in the "randomness" logic here.
 // Idea: Since the MC runs so many cycles each second, the human input will act the random input. The chance of a person
 // Hitting the same number again is so low that this randomness would be okay I think. - Andy W.
+
 void GPIOPortF_Handler(void) {
     GPIO_PORTF_ICR_R = 0x10;
     
     if (!is_playing) {
-        UART_OutString("\r\n[SYSTEM] Button Pressed! Analyzing soul...\r\n");
+       UART_OutString("\r\n[SYSTEM] Button Pressed! Analyzing soul...\r\n");
         
             // Random Logic
             // Grab the lower bit of the SysTick timer for a 50/50 chance
             // If we are currently in the background song (Deck the Halls)
-        if (current_state >= S_DECK_HALLS && current_state <= S_FA_LA_4) {
+        if ( (current_state >= S_DECK_HALLS && current_state <= S_FA_LA_4) && state_buffer.size == 0) {
             UART_OutString("\r\n[SYSTEM] Analyzing soul...\r\n");
-        
             uint32_t rng_seed = NVIC_ST_CURRENT_R; 
             if (rng_seed % 2 == 0) {
                 UART_OutString("[RESULT] Status: NICE. Playing Jingle Bells.\r\n");
-                current_state = S_JINGLE_1;
+                push_buffer(&state_buffer, S_JINGLE_1);
+
             } 
             else {
                 UART_OutString("[RESULT] Status: NAUGHTY! Playing The Grinch.\r\n");
-                current_state = S_GRINCH_1;
+                push_buffer(&state_buffer, S_GRINCH_1);
+
             }
             is_paused = 0; // Make sure we aren't paused when the new song starts
         } 
@@ -250,6 +350,7 @@ void GPIOPortF_Handler(void) {
             }
         }
     }
+
 }
 
 
@@ -426,7 +527,8 @@ int main(void) {
     Init_All();                 // PWM/LEDs
     UART_Init();
     PortF_Init_Buttons();       // Button + Interrupt Setup
-
+    // Old: init_buffer(&state_buffer, 10);
+    init_buffer(&state_buffer);
     // Start SysTick now so it's "randomizing" in the background
     NVIC_ST_RELOAD_R = 0x00FFFFFF; // Max 24-bit value
     NVIC_ST_CURRENT_R = 0;        // Clear current to start count
@@ -434,8 +536,13 @@ int main(void) {
 
     while (1) {
         // If we aren't paused, keep the music moving
-        if (!is_paused) {
-            current_state = FSM_Tick(current_state);
-        }
+      if (!is_paused) { 
+         current_state = FSM_Tick(current_state);
+        
+        // check the input buffer for new states and overwrite if neccesary
+          if (state_buffer.size > 0) {
+            current_state = pop_buffer(&state_buffer);
+          } 
+      }
     }
 }
