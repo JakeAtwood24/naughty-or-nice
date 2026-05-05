@@ -1,15 +1,18 @@
 #include <stdint.h>
 #include <math.h>
 #include <stdlib.h>
-#include <stdint.h>
 #include <stdio.h>
-////
+
 //// ____________________________________
 //// IF YOU ARE RUNNING THIS PROGRAM MAKE SURE TO CHANGE PORTF IN startup_ccs.c TO GPIOPortF_Handler and have extern void GPIOPortF_Handler(void);
 //// IN THE EXTERNAL DECLARATION AT THE TOP OF PROGRAM
 //// YOU HAVE BEEN WARNED.
 //// Andy W.
 //// ___________________________________
+//// Hi, Andy W again, Update on May 4th 2026
+//// You will need to switch two things in startup.ccs
+//// 1st. Declare this in external declarations: extern void UART0_Handler(void);
+//// 2nd. Find the UART0 in the NVIC and replace it with: UART0_Handler
 
 // System control registers
 #define SYSCTL_RCGCGPIO_R (*((volatile uint32_t *)0x400FE608)) // GPIO clock
@@ -53,6 +56,10 @@
 #define GPIO_PORTA_AFSEL_R (*((volatile uint32_t *)0x40004420))
 #define GPIO_PORTA_PCTL_R  (*((volatile uint32_t *)0x4000452C))
 #define GPIO_PORTA_DEN_R   (*((volatile uint32_t *)0x4000451C))
+// New UART Registers
+#define UART0_IM_R        (*((volatile uint32_t *)0x4000C038)) // Interrupt Mask
+#define UART0_ICR_R       (*((volatile uint32_t *)0x4000C044)) // Interrupt Clear
+#define UART0_MIS_R       (*((volatile uint32_t *)0x4000C040)) // Masked Interrupt Status 
 
 // Andy's Modified
 // Port F to handle interrupt
@@ -76,11 +83,12 @@
 #define NVIC_ST_CURRENT_R (*((volatile uint32_t *)0xE000E018)) // Current value
 #define COUNTFLAG (1U << 16) // Bit 16 of NVIC_ST_CTRL_R
 
-
-
+// Switching the dynamic memory allocation to a fixed memory allocation for efficiency and dedicated memory - Andy W.
+#define BUFFER_MAX 10
 
 #define SYSCLK_HZ 16000000 // 16 MHz default clock (no PLL)
 
+// Jake Note Updates
 // Note key numbers on an 88-key piano
 #define note_LB 39
 #define note_C  40  // Middle C
@@ -91,13 +99,27 @@
 #define note_A  49  // A4 = 440Hz
 #define note_B  51
 #define note_HC 52  // High C
+#define note_HCS 53  // High C
 
-// Andy's Modified
+// Jake Rhythm Updates
 // Quarter/half note durations in seconds, the "f" makes it a float
 #define EIGHTH 0.25
 #define QUARTER 0.5 // This ends up being .5 seconds, which is a quarter note at 120 bpm
 #define DOT_Q 0.75
 #define HALF    1.0 // This ends up being 1 second, which is just a half note at 120 bpm
+#define DOT_H  1.5   // Dotted half
+#define WHOLE     2.0   // 2.0 * HALF
+// Adjusted BPM for the Grinch
+#define GRINCH_TEMPO 1.4f
+
+// Jake Modified Rest Function
+// Since 0 doesn't work as a "rest" when passed through the note function had to make a rest function.
+void rest(float dur) {
+    PWM0_ENABLE_R &= ~0x01;   // Turn off sound
+    GPIO_PORTE_DATA_R = 0;    // LEDs off
+
+    SysTick_Wait((uint32_t)(dur * SYSCLK_HZ));
+}
 
 // Andy's Modification
 // LED bitmask patterns
@@ -133,40 +155,42 @@ volatile SongState current_state = S_DECK_HALLS; //Turn this into a global becau
 //____________________________________
 //Fixed-sized Queue-based Buffer + Helper functions
 
-typedef struct  {
-  size_t MAX_SIZE;
-  volatile int* arr; 
-  size_t size; 
+// Jordan's Implemenation 
+// Andy's Modfication
+typedef struct {
+    size_t MAX_SIZE;
+    volatile int arr[BUFFER_MAX]; // Changed from pointer to fixed array
+    size_t size; 
 } buffer;
 
-void init_buffer( volatile buffer* buf, size_t size) {
-  buf->MAX_SIZE = size; 
-  buf->arr = (volatile int*) malloc(size * sizeof(int));
-  buf->size = 0;
+void init_buffer(volatile buffer* buf) {
+    buf->MAX_SIZE = BUFFER_MAX; 
+    buf->size = 0;
+    // No malloc needed with fixed memory
 }
 
-void push_buffer( volatile buffer* buf, int value) {
-  size_t current_size = (buf->size);
-  if ((current_size) <  (buf->MAX_SIZE)) {
-    (buf->arr)[current_size] = value; 
-    (buf->size)++;
-  }
+// push_buffer and pop_buffer stay almost identical, 
+// but they are now safer because the memory is locked in.
+void push_buffer(volatile buffer* buf, int value) {
+    if (buf->size < buf->MAX_SIZE) {
+        buf->arr[buf->size] = value; 
+        buf->size++;
+    }
 }
 
-int pop_buffer( volatile buffer* buf) {
- 
- if ((buf->size) == 0) return INT8_MAX - 1;
-  //get first element in queue 
-  int first = (buf->arr)[0]; 
+uint8_t pop_buffer(volatile buffer* buf) {
+    if (buf->size == 0) return 254; // Using a literal instead of INT8_MAX for simplicity
+    
+    int first = buf->arr[0]; 
 
- // shift each element over
-  volatile size_t i;
-  for (i = 0; i < buf->size; i++) {
-    buf->arr[i] = buf->arr[i + 1]; 
-  }
+    // Shift elements
+    size_t i;
+    for (i = 0; i < (buf->size - 1); i++) {
+        buf->arr[i] = buf->arr[i + 1]; 
+    }
 
-  (buf->size)--;
-  return  first;  
+    buf->size--;
+    return (uint8_t)first;  
 }
 
 void clear_buffer ( volatile buffer* buf) {
@@ -182,7 +206,6 @@ void cleanup_buffer ( volatile buffer* buf) {
 //_______________________
 
  volatile buffer state_buffer; 
-
 
 // Andy Modified
 //Modified PWM_Init to take LEDs ports
@@ -208,8 +231,6 @@ void Init_All(void) {
     PWM0_0_CTL_R = 0;
     PWM0_0_GENA_R = 0x8C;
     PWM0_0_CTL_R = 1;
-
-
 }
 
 // Andy's Modifications
@@ -224,7 +245,13 @@ void UART_Init(void) {
     UART0_IBRD_R = 8;          // 115,200 baud for 16MHz clock
     UART0_FBRD_R = 44;
     UART0_LCRH_R = 0x70;       // 8-bit, FIFO enabled
-    UART0_CTL_R |= 0x01;       // Enable UART
+
+    // Enable Receive Interrupts - Andy W
+    // These lines setup for a bidirectional UART
+    UART0_IM_R |= 0x10;        // Arm RXRIS (Receive Interrupt)
+    NVIC_EN0_R |= (1 << 5);    // UART0 is Interrupt #5 in NVIC
+    
+    UART0_CTL_R |= 0x01;       // Enable UART (TX and RX)
     
     GPIO_PORTA_AFSEL_R |= 0x03; // PA0, PA1 alt function
     GPIO_PORTA_DEN_R |= 0x03;
@@ -233,11 +260,11 @@ void UART_Init(void) {
 
 // SysTick delay — waits for exactly 'ticks' clock cycles
 void SysTick_Wait(uint32_t reload) {
-  NVIC_ST_CTRL_R = 0; // Disable SysTick during setup
-  NVIC_ST_RELOAD_R = reload - 1; // Set reload value
-  NVIC_ST_CURRENT_R = 0; // Clear current value and COUNTFLAG
-  NVIC_ST_CTRL_R = 0x05; // Enable + core clock, no interrupt
-  while ((NVIC_ST_CTRL_R & COUNTFLAG) == 0) {} // Wait until count reaches 0
+    NVIC_ST_CTRL_R = 0; // Disable SysTick during setup
+    NVIC_ST_RELOAD_R = reload - 1; // Set reload value
+    NVIC_ST_CURRENT_R = 0; // Clear current value and COUNTFLAG
+    NVIC_ST_CTRL_R = 0x05; // Enable + core clock, no interrupt
+    while ((NVIC_ST_CTRL_R & COUNTFLAG) == 0) {} // Wait until count reaches 0
 }
 
 // Sara's Modification
@@ -273,11 +300,28 @@ void UART_OutString(char *pt) {
     }
 }
 
+// Andy W.
+// This function will handle all our remote operation through UART
+// Just two inputs for now "g" to set the naughty flag and "j" to set the nice flag
+void UART0_Handler(void) {
+    UART0_ICR_R = 0x10; // Clear the interrupt flag
+    
+    char c = (char)(UART0_DR_R & 0xFF); // Read the character
+    
+    if (c == 'g' || c == 'G') {
+        UART_OutString("\r\n[UART] Remote Trigger: Grinch Mode!\r\n");
+        push_buffer(&state_buffer, S_GRINCH_1);
+    } 
+    else if (c == 'j' || c == 'J') {
+        UART_OutString("\r\n[UART] Remote Trigger: Jingle Mode!\r\n");
+        push_buffer(&state_buffer, S_JINGLE_1);
+    }
+}
+
 // The Interrupt Service Routine
 // Updated, 4/27/2026, Adding in the "randomness" logic here.
 // Idea: Since the MC runs so many cycles each second, the human input will act the random input. The chance of a person
 // Hitting the same number again is so low that this randomness would be okay I think. - Andy W.
-
 void GPIOPortF_Handler(void) {
     GPIO_PORTF_ICR_R = 0x10;
     
@@ -313,10 +357,7 @@ void GPIOPortF_Handler(void) {
             }
         }
     }
-
 }
-
-
 
 // Andy's Modified
 // keynum is piano key number, dur is duration in seconds
@@ -356,7 +397,6 @@ void note(int keynum, float dur, uint32_t led_mask) {
     PWM0_ENABLE_R &= ~0x01;
     SysTick_Wait((uint32_t)(0.05f * SYSCLK_HZ));
 }
-
 
 // Andy's Modified
 SongState FSM_Tick(SongState current) {
@@ -425,60 +465,48 @@ SongState FSM_Tick(SongState current) {
             note(note_C, QUARTER, LED1|LED3);
             return S_DECK_HALLS; // Loop back to start
 
-        // Naughty States
         case S_GRINCH_1: // "You're a mean one..."
-            note(note_C, QUARTER, LED1|LED4);  // Start with outer LEDs
-            note(note_D, QUARTER, LED2|LED3);  // Move to inner LEDs
-            note(note_E, HALF, ALL_OFF);       // Dramatic pause
+            note(note_F,  EIGHTH * GRINCH_TEMPO, LED1); note(note_G,  EIGHTH * GRINCH_TEMPO, LED2);
+            note(note_A, EIGHTH * GRINCH_TEMPO, LED3); rest(QUARTER);
+            note(note_D,  DOT_Q * GRINCH_TEMPO, LED4);
             return S_GRINCH_2;
 
         case S_GRINCH_2: // "...Mr. Grinch"
-            note(note_LB, DOT_Q, LED1|LED2|LED3|LED4); // Flash all for the low note
+            note(note_F,  EIGHTH * GRINCH_TEMPO, LED2); note(note_A, EIGHTH * GRINCH_TEMPO, LED3|LED4);
+            note(note_G,  DOT_Q * GRINCH_TEMPO, LED1); rest(HALF);
             return S_GRINCH_3;
 
-        case S_GRINCH_3: // "You really are a heel!"
-            note(note_C, EIGHTH, LED1);
-            note(note_LB, EIGHTH, LED2);
-            note(note_C, EIGHTH, LED3);
-            note(note_LB, EIGHTH, LED4);
-            return S_GRINCH_4;
-
-        case S_GRINCH_4:
-            note(note_LB, HALF, LED1|LED4);
-            // After the song finishes, go back to Deck the Halls (Idle)
+        case S_GRINCH_3: // "You really are a heel"
+            note(note_D,  EIGHTH * GRINCH_TEMPO, LED1); note(note_A, DOT_Q * GRINCH_TEMPO, LED2);
+            note(note_A,  EIGHTH * GRINCH_TEMPO, LED3); note(note_B,  DOT_Q * GRINCH_TEMPO, LED4);
+            note(note_B, EIGHTH * GRINCH_TEMPO, LED1|LED2|LED3|LED4); note(note_HCS, HALF * GRINCH_TEMPO, LED1|LED2|LED3|LED4);
             return S_DECK_HALLS;
 
-        case S_JINGLE_1: // "Jin-gle bells,"
-            note(note_E, QUARTER, LED1);
-            note(note_E, QUARTER, LED2);
-            note(note_E, HALF,    LED3|LED4); 
+        case S_JINGLE_1: // "Jingle bells, jingle bells,"
+            note(note_E, QUARTER, LED1); note(note_E, QUARTER, LED2);
+            note(note_E, HALF,    LED3|LED4); note(note_E, QUARTER, LED1);
+            note(note_E, QUARTER, LED2); note(note_E, HALF,    LED3|LED4);
             return S_JINGLE_2;
 
-        case S_JINGLE_2: // "Jin-gle bells,"
-            note(note_E, QUARTER, LED1);
-            note(note_E, QUARTER, LED2);
-            note(note_E, HALF,    LED3|LED4);
+        case S_JINGLE_2: // "Jingle all the way!"
+            note(note_E, QUARTER, LED1); note(note_G, QUARTER, LED2);
+            note(note_C, QUARTER, LED3); note(note_D, QUARTER, LED4);
+            note(note_E, WHOLE, LED1|LED2|LED3|LED4);
             return S_JINGLE_3;
 
-        case S_JINGLE_3: // "Jin-gle all the way!"
-            note(note_E, QUARTER, LED1);
-            note(note_G, QUARTER, LED2);
-            note(note_C, QUARTER, LED3);
-            note(note_D, QUARTER, LED4);
-            note(note_E, HALF,    LED1|LED2|LED3|LED4);
+        case S_JINGLE_3: // "Oh what fun it is to ride"
+            note(note_F, QUARTER, LED1|LED2); note(note_F, QUARTER, LED3|LED4);
+            note(note_F, DOT_Q,   LED1|LED2); note(note_F, EIGHTH,  LED3|LED4);
+            note(note_F, QUARTER, LED1|LED2); note(note_E, QUARTER, LED3|LED4);
+            note(note_E, QUARTER, LED1|LED2); note(note_E, EIGHTH,  LED3|LED4);
+            note(note_E, EIGHTH,  LED1|LED2);
             return S_JINGLE_4;
 
-        case S_JINGLE_4: // "Oh what fun..."
-            note(note_F, QUARTER, LED1|LED2);
-            note(note_F, QUARTER, LED1|LED2);
-            note(note_F, QUARTER, LED3|LED4);
-            note(note_F, QUARTER, LED3|LED4);
-            return S_JINGLE_FINISH;
-
-        case S_JINGLE_FINISH:
-            note(note_E, QUARTER, LED1|LED3);
-            note(note_E, QUARTER, LED2|LED4);
-            return S_DECK_HALLS; // Always return to Idle/Background music
+        case S_JINGLE_4: // "In a one-horse open sleigh!"
+            note(note_G, QUARTER, LED1); note(note_G, QUARTER, LED2);
+            note(note_F, QUARTER, LED3); note(note_D, QUARTER, LED4);
+            note(note_C, DOT_H, LED1|LED2|LED3|LED4);
+            return S_DECK_HALLS;
 
         default:
             return S_DECK_HALLS;
@@ -490,8 +518,8 @@ int main(void) {
     Init_All();                 // PWM/LEDs
     UART_Init();
     PortF_Init_Buttons();       // Button + Interrupt Setup
-    init_buffer(&state_buffer, 10);
-
+    // Old: init_buffer(&state_buffer, 10);
+    init_buffer(&state_buffer);
     // Start SysTick now so it's "randomizing" in the background
     NVIC_ST_RELOAD_R = 0x00FFFFFF; // Max 24-bit value
     NVIC_ST_CURRENT_R = 0;        // Clear current to start count
