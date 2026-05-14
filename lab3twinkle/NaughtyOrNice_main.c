@@ -1,7 +1,7 @@
-#include <stdint.h>
-#include <math.h>
 #include <stdlib.h>
+#include <stdint.h>
 #include <stdio.h>
+#include <math.h> // Important!
 
 //// ===============================================
 //// IF YOU ARE RUNNING THIS PROGRAM MAKE SURE TO CHANGE PORTF IN startup_ccs.c TO GPIOPortF_Handler and have extern void GPIOPortF_Handler(void);
@@ -18,9 +18,10 @@
 //// ===============================================
 //// Registers, Set-Up, Bitmasks, and misc Constants
 //// ===============================================
+
 // System control registers
-#define SYSCTL_RCGCGPIO_R (*((volatile uint32_t *)0x400FE608))  // GPIO clock
-#define SYSCTL_RCGCPWM_R (*((volatile uint32_t *)0x400FE640))   // PWM clock
+#define SYSCTL_RCGCGPIO_R (*((volatile uint32_t *)0x400FE608)) // GPIO clock
+#define SYSCTL_RCGCPWM_R (*((volatile uint32_t *)0x400FE640)) // PWM clock
 
 // GPIO Port B registers (base: 0x40005000)
 // Jake added bottom 2 for more lights
@@ -41,15 +42,15 @@
 #define GPIO_PORTE_AMSEL_R (*((volatile uint32_t *)0x40024528)) // Analog mode
 #define GPIO_PORTE_PCTL_R  (*((volatile uint32_t *)0x4002452C)) // Port control
 
-// Sara's Modification
-// GPIO Port F (Button SW1)
-#define GPIO_PORTF_DATA_R (*((volatile uint32_t *)0x400253FC))  //SW1
-#define GPIO_PORTF_DIR_R (*((volatile uint32_t *)0x40025400))   // Direction register
+//Sara's Modification
+//GPIO Port F (Button SW1)
+#define GPIO_PORTF_DATA_R (*((volatile uint32_t *)0x400253FC)) //SW1
+#define GPIO_PORTF_DIR_R (*((volatile uint32_t *)0x40025400)) // Direction register
 #define GPIO_PORTF_AFSEL_R (*((volatile uint32_t *)0x40025420)) // Alternate function
-#define GPIO_PORTF_DEN_R (*((volatile uint32_t *)0x4002551C))   // Digital enable
-#define GPIO_PORTF_PUR_R (*((volatile uint32_t *)0x40025510))   // Pull-up resistor
-#define GPIO_PORTF_LOCK_R (*((volatile uint32_t *)0x40025520))  // Lock register
-#define GPIO_PORTF_CR_R (*((volatile uint32_t *)0x40025524))    // Commit register
+#define GPIO_PORTF_DEN_R (*((volatile uint32_t *)0x4002551C)) // Digital enable
+#define GPIO_PORTF_PUR_R (*((volatile uint32_t *)0x40025510)) // Pull-up resistor
+#define GPIO_PORTF_LOCK_R (*((volatile uint32_t *)0x40025520)) // Lock register
+#define GPIO_PORTF_CR_R (*((volatile uint32_t *)0x40025524)) // Commit register
 
 // Andy's Modifications
 // UART0 Register Defines
@@ -60,6 +61,8 @@
 #define UART0_FBRD_R      (*((volatile uint32_t *)0x4000C028))
 #define UART0_LCRH_R      (*((volatile uint32_t *)0x4000C02C))
 #define UART0_CTL_R       (*((volatile uint32_t *)0x4000C030))
+#define UART0_UARTIFLS_R   (*((volatile uint32_t *)0x4000C034))
+
 #define GPIO_PORTA_AFSEL_R (*((volatile uint32_t *)0x40004420))
 #define GPIO_PORTA_PCTL_R  (*((volatile uint32_t *)0x4000452C))
 #define GPIO_PORTA_DEN_R   (*((volatile uint32_t *)0x4000451C))
@@ -67,6 +70,7 @@
 #define UART0_IM_R        (*((volatile uint32_t *)0x4000C038)) // Interrupt Mask
 #define UART0_ICR_R       (*((volatile uint32_t *)0x4000C044)) // Interrupt Clear
 #define UART0_MIS_R       (*((volatile uint32_t *)0x4000C040)) // Masked Interrupt Status 
+#define UART0_RIS_R       (*((volatile uint32_t *)0x4000C03C)) // Raw Interrupt Status 
 
 // Andy's Modified
 // Port F to handle interrupt
@@ -79,38 +83,39 @@
 
 // PWM Module 0, Generator 0 registers (base: 0x40028000)
 #define PWM0_ENABLE_R (*((volatile uint32_t *)0x40028008)) // PWM output enable
-#define PWM0_0_CTL_R (*((volatile uint32_t *)0x40028040))  // Generator control
+#define PWM0_0_CTL_R (*((volatile uint32_t *)0x40028040)) // Generator control
 #define PWM0_0_LOAD_R (*((volatile uint32_t *)0x40028050)) // Load (period)
 #define PWM0_0_CMPA_R (*((volatile uint32_t *)0x40028058)) // Compare A (duty)
 #define PWM0_0_GENA_R (*((volatile uint32_t *)0x40028060)) // Generator A action
 
 // SysTick registers 
-#define NVIC_ST_CTRL_R (*((volatile uint32_t *)0xE000E010))     // Control/Status
-#define NVIC_ST_RELOAD_R (*((volatile uint32_t *)0xE000E014))   // Reload value
-#define NVIC_ST_CURRENT_R (*((volatile uint32_t *)0xE000E018))  // Current value
+#define NVIC_ST_CTRL_R (*((volatile uint32_t *)0xE000E010)) // Control/Status
+#define NVIC_ST_RELOAD_R (*((volatile uint32_t *)0xE000E014)) // Reload value
+#define NVIC_ST_CURRENT_R (*((volatile uint32_t *)0xE000E018)) // Current value
 #define COUNTFLAG (1U << 16) // Bit 16 of NVIC_ST_CTRL_R
 
-// Switching the dynamic memory allocation to a fixed memory allocation for efficiency and dedicated memory - Andy W.
-#define BUFFER_MAX 10
-// Define the system clock (no PLL)
-#define SYSCLK_HZ 16000000 // 16 MHz default clock (no PLL)
+#define SYSCTL_RCGCDMA_R      (*((volatile uint32_t *)0x400FE60C))
+#define UDMA_CTLBASE_R        (*((volatile uint32_t *)0x400FF008))
+#define UDMA_CFG_R            (*((volatile uint32_t *)0x400FF004))
+#define UDMA_ENASET_R         (*((volatile uint32_t *)0x400FF028))
+#define UART0_DMACTL_R        (*((volatile uint32_t *)0x4000C048))
+#define UDMA_DMACHIS_R        (*((volatile uint32_t *)0x400FF504))
+#define UDMA_DMAREQMASKSET_R  (*((volatile uint32_t *)0x400FF020))
+#define UDMA_DMAERRCLR_R      (*((volatile uint32_t *)0x400FF04C))
 
-// Andy's Modification
-// Jake Update for 10 lights
-// LED bitmask patterns
-#define LED1  0x001 // PE0
-#define LED2  0x002 // PE1
-#define LED3  0x004 // PE2
-#define LED4  0x008 // PE3
-#define LED5  0x010 // PE4
-#define LED6  0x020 // PE5
-#define LED7  0x040 // PB0
-#define LED8  0x080 // PB1
-#define LED9  0x100 // PB2
-#define LED10 0x200 // PB3
-#define ALL_OFF 0x00
-//Sara's Modfifications
-#define SW1 0x10
+#define UART0_IFLS_R (*((volatile uint32_t *)0x4000C034)) // Interrupt FIFO Level Select
+#define UDMA_PRIOSET_R (*((volatile uint32_t *)0x400FF038))
+#define UART0_ECR_R (*((volatile uint32_t *)0x4000C004))
+
+#define BUFFER_MAX 32
+#define DMA_TRANSFER_SIZE 6 /* Number of characters to transfer per cycle. The serial console usually adds 2 non printable chars
+                               For most cases this can be equal to BUFFER_MAX. */
+
+#pragma DATA_ALIGN(ControlTable, 1024)
+uint8_t ControlTable[1024];
+static volatile uint8_t dma_rx_buffer[BUFFER_MAX];
+
+#define SYSCLK_HZ 16000000  // 16 MHz default clock (no PLL)
 
 //// ===============================================
 //// Music Constants
@@ -139,6 +144,30 @@
 // Adjusted BPM for the Grinch
 #define GRINCH_TEMPO 1.4f
 
+// Andy's Modified
+// Quarter/half note durations in seconds, the "f" makes it a float
+#define EIGHTH 0.25
+#define QUARTER 0.5 // This ends up being .5 seconds, which is a quarter note at 120 bpm
+#define DOT_Q 0.75
+#define HALF    1.0 // This ends up being 1 second, which is just a half note at 120 bpm
+
+// Andy's Modification
+// Jake Update for 10 lights
+// LED bitmask patterns
+#define LED1  0x001 // PE0
+#define LED2  0x002 // PE1
+#define LED3  0x004 // PE2
+#define LED4  0x008 // PE3
+#define LED5  0x010 // PE4
+#define LED6  0x020 // PE5
+#define LED7  0x040 // PB0
+#define LED8  0x080 // PB1
+#define LED9  0x100 // PB2
+#define LED10 0x200 // PB3
+#define ALL_OFF 0x00
+//Sara's Modfifications
+#define SW1 0x10
+
 //// ===============================================
 //// FSM Setup
 //// ===============================================
@@ -161,7 +190,7 @@ typedef enum {
 // State Variables and volatile functions
 volatile uint8_t is_playing = 0; // 0 = Idle, 1 = Song is active
 volatile uint8_t is_paused = 0;  // 0 = Running, 1 = Frozen
-volatile SongState current_state = S_DECK_HALLS; // Turn this into a global because the program needs to be able to switch on the fly.
+volatile SongState current_state = S_DECK_HALLS; //Turn this into a global because the program needs to be able to switch on the fly.
 
 //// ===============================================
 //// Fixed-sized Queue-based Buffer
@@ -211,10 +240,12 @@ void clear_buffer ( volatile buffer* buf) {
 void cleanup_buffer ( volatile buffer* buf) {
     buf->size = 0;
     buf->MAX_SIZE = 0; 
-    free(buf);
+    free((void*)buf);
 }
 
-volatile buffer state_buffer; 
+//_______________________
+
+ volatile buffer state_buffer; 
 
 //// ===============================================
 //// Init/Handler/Helper Functions
@@ -256,38 +287,13 @@ static inline void set_leds(uint32_t led_mask) {
     GPIO_PORTB_DATA_R = (led_mask >> 6) & 0x0F;    // PB3:PB0
 }
 
-// Andy's Modifications
-// UART Helper Functions
-// Just the above Init_all, I'm initalizing Port A to be strictly UART.
-void UART_Init(void) {
-    SYSCTL_RCGCUART_R |= 0x01;  // Enable UART0
-    SYSCTL_RCGCGPIO_R |= 0x01;  // Enable Port A
-    while((SYSCTL_RCGCGPIO_R & 0x01) == 0);
-
-    UART0_CTL_R &= ~0x01;       // Disable UART
-    UART0_IBRD_R = 8;           // 115,200 baud for 16MHz clock
-    UART0_FBRD_R = 44;
-    UART0_LCRH_R = 0x70;        // 8-bit, FIFO enabled
-
-    // Enable Receive Interrupts - Andy W
-    // These lines setup for a bidirectional UART
-    UART0_IM_R |= 0x10;         // Arm RXRIS (Receive Interrupt)
-    NVIC_EN0_R |= (1 << 5);     // UART0 is Interrupt #5 in NVIC
-    
-    UART0_CTL_R |= 0x01;        // Enable UART (TX and RX)
-    
-    GPIO_PORTA_AFSEL_R |= 0x03; // PA0, PA1 alt function
-    GPIO_PORTA_DEN_R |= 0x03;
-    GPIO_PORTA_PCTL_R = (GPIO_PORTA_PCTL_R & 0xFFFFFF00) + 0x00000011;
-}
-
 // SysTick delay — waits for exactly 'ticks' clock cycles
 void SysTick_Wait(uint32_t reload) {
-    NVIC_ST_CTRL_R = 0;                             // Disable SysTick during setup
-    NVIC_ST_RELOAD_R = reload - 1;                  // Set reload value
-    NVIC_ST_CURRENT_R = 0;                          // Clear current value and COUNTFLAG
-    NVIC_ST_CTRL_R = 0x05;                          // Enable + core clock, no interrupt
-    while ((NVIC_ST_CTRL_R & COUNTFLAG) == 0) {}    // Wait until count reaches 0
+  NVIC_ST_CTRL_R = 0; // Disable SysTick during setup
+  NVIC_ST_RELOAD_R = reload - 1; // Set reload value
+  NVIC_ST_CURRENT_R = 0; // Clear current value and COUNTFLAG
+  NVIC_ST_CTRL_R = 0x05; // Enable + core clock, no interrupt
+  while ((NVIC_ST_CTRL_R & COUNTFLAG) == 0) {} // Wait until count reaches 0
 }
 
 // Sara's Modification
@@ -295,54 +301,128 @@ void SysTick_Wait(uint32_t reload) {
 void PortF_Init_Buttons(void) {
     SYSCTL_RCGCGPIO_R |= 0x20;
     while ((SYSCTL_RCGCGPIO_R & 0x20) == 0) {}
-    GPIO_PORTF_LOCK_R = 0x4C4F434B; // Unlock PF4 only
+    GPIO_PORTF_LOCK_R = 0x4C4F434B;   // Unlock PF4 only
     GPIO_PORTF_CR_R |= 0x10;
-    GPIO_PORTF_DIR_R &= ~0x10;      // PF4 input
-    GPIO_PORTF_AFSEL_R &= ~0x10;    // PF4 GPIO
-    GPIO_PORTF_PUR_R |= 0x10;       // Pull-up on PF4
-    GPIO_PORTF_DEN_R |= 0x10;       // Digital enable PF4
+    GPIO_PORTF_DIR_R &= ~0x10;        // PF4 input
+    GPIO_PORTF_AFSEL_R &= ~0x10;      // PF4 GPIO
+    GPIO_PORTF_PUR_R |= 0x10;         // Pull-up on PF4
+    GPIO_PORTF_DEN_R |= 0x10;         // Digital enable PF4
 
     // Andy's Modified
     // Lines added to handle interrupts
-    GPIO_PORTF_IS_R  &= ~0x10;  // PF4 is edge-sensitive
-    GPIO_PORTF_IBE_R &= ~0x10;  // PF4 is not both edges
-    GPIO_PORTF_IEV_R &= ~0x10;  // PF4 falling edge event 
-    GPIO_PORTF_ICR_R  = 0x10;   // Clear any prior flag
-    GPIO_PORTF_IM_R  |= 0x10;   // Arm interrupt on PF4 
+    GPIO_PORTF_IS_R  &= ~0x10;    // PF4 is edge-sensitive
+    GPIO_PORTF_IBE_R &= ~0x10;    // PF4 is not both edges
+    GPIO_PORTF_IEV_R &= ~0x10;    // PF4 falling edge event 
+    GPIO_PORTF_ICR_R  = 0x1a0;     // Clear any prior flag
+    GPIO_PORTF_IM_R  |= 0x10;     // Arm interrupt on PF4 
 
     // Andy Modified
     // Enable Port F interrupt in NVIC
     NVIC_EN0_R |= (1 << 30);
 }
 
-//// ===============================================
-//// Bidirectional UART Functions
-//// ===============================================
 // This is the function that allows us to send sentences through the serial console
 void UART_OutString(char *pt) {
-    while(*pt) {
-        while((UART0_FR_R & 0x20) != 0); // Wait if TX FIFO full
-        UART0_DR_R = *pt++;
-    }
+   while(*pt) {
+       while((UART0_FR_R & 0x20) != 0); // Wait if TX FIFO full
+       UART0_DR_R = *pt++;
+   }
+}
+
+// Just like all the other Inits above, this function is strictally for DMA so I know where everything for DMA is initalizied at - Andy W.
+// Changed to only handle DMA registers 
+void DMA_Init(void) {
+    SYSCTL_RCGCDMA_R |= 0x01;    // Enable DMA Clock
+    while((SYSCTL_RCGCDMA_R & 0x01) == 0);
+
+    UDMA_CFG_R = 0x01;           // Enable Controller
+    UDMA_CTLBASE_R = (uint32_t) ControlTable;
+
+    // We target the "Primary" control structure for Channel 8
+    // Each entry is 16 bytes: 8 * 16 = 128 (0x80) offset
+    uint32_t *controlEntry = (uint32_t *) &ControlTable[0x80];
+
+
+    // 1. Source End Address (UART Data Register)
+    controlEntry[0] = (uint32_t) &UART0_DR_R; 
+    // 2. Destination End Address (Last element of your buffer)
+    controlEntry[1] =  (uint32_t) dma_rx_buffer + (BUFFER_MAX - 1); //[BUFFER_MAX - 1];  //BUFFER_MAX - 1
+    // 3. Control Word
+    
+     controlEntry[2] =
+    (0x0 << 30) |   //  DST increment = 8-bit 
+    (0x0 << 28) |   //  DST size = 8-bit 
+    (0x3 << 26) |   // SRC increment = none
+    (0x0 << 24) |   // SRC size = 8-bit
+    ((DMA_TRANSFER_SIZE - 1) << 4) |  // N-1 items (remember this includes non-printable chars) 
+    0x1;            // Basic mode
+
+    UDMA_ENASET_R = (1 << 8);    // Enable DMA Channel 8
+
+    UDMA_PRIOSET_R = (1 << 8); // Give UART0 RX high priority
+}
+
+// Andy's Modifications
+// UART Helper Functions
+// Just the above Init_all, I'm initalizing Port A to be strictly UART.
+void UART_Init(void) {
+    SYSCTL_RCGCUART_R |= 0x01; // Enable UART0
+    SYSCTL_RCGCGPIO_R |= 0x01; // Enable Port A
+    while((SYSCTL_RCGCGPIO_R & 0x01) == 0);
+
+    UART0_CTL_R &= ~0x01;      // Disable UART
+    UART0_IBRD_R = 8;          // 115,200 baud for 16MHz clock
+    UART0_FBRD_R = 44;
+    UART0_LCRH_R = 0x70;   // used to be 0x68     // 8-bit, FIFO enabled
+    // UART0_IFLS_R &= ~0x38; 
+    
+    GPIO_PORTA_AFSEL_R |= 0x03; // PA0, PA1 alt function
+    GPIO_PORTA_DEN_R |= 0x03;
+    GPIO_PORTA_PCTL_R = (GPIO_PORTA_PCTL_R & 0xFFFFFF00) + 0x00000011;
+
+    //DMA & Interrupt 
+
+    DMA_Init(); 
+    NVIC_EN0_R |= (1 << 5); // UART0 is Interrupt #5 in NVIC (this should be done after enabling DMA)
+    UART0_DMACTL_R |= 0x01;  // Tell uart to enable DMA
+    UART0_CTL_R = 0x301; // Enable UART (TX and RX) (this should be done after configuring DMA)
+
 }
 
 // Andy W.
 // This function will handle all our remote operation through UART
 // Just two inputs for now "g" to set the naughty flag and "j" to set the nice flag
 void UART0_Handler(void) {
-    UART0_ICR_R = 0x10; // Clear the interrupt flag
+
+  if ((UDMA_DMACHIS_R & (1 << 8)) != 0) { // check if DMA interrupt
+    UART_OutString("\r\n[ISR fired]\r\n");
+  
+    int i;
+    // items are filled from back to front 
+    for (i = BUFFER_MAX - DMA_TRANSFER_SIZE; i < BUFFER_MAX; i++) {
+        
+        char c =  dma_rx_buffer[i];
+        dma_rx_buffer[i] = 0; // clear buffer with NULL/0/'\0'
+
+        if (c < 32 || c > 122) {continue;} // ignore non printable character
     
-    char c = (char)(UART0_DR_R & 0xFF); // Read the character
-    
-    if (c == 'g' || c == 'G') {
-        UART_OutString("\r\n[UART] Remote Trigger: Grinch Mode!\r\n");
-        push_buffer(&state_buffer, S_GRINCH_1);
-    } 
-    else if (c == 'j' || c == 'J') {
-        UART_OutString("\r\n[UART] Remote Trigger: Jingle Mode!\r\n");
-        push_buffer(&state_buffer, S_JINGLE_1);
+        if (c == 'g' || c == 'G') {
+                UART_OutString("\r\n[UART] Remote Trigger: Grinch Mode!\r\n");
+                push_buffer(&state_buffer, S_GRINCH_1);
+            }  else if (c == 'j' || c == 'J') {
+                UART_OutString("\r\n[UART] Remote Trigger: Jingle Mode!\r\n");
+                push_buffer(&state_buffer, S_JINGLE_1);
+        } 
     }
+
+    UDMA_DMACHIS_R |= (1 << 8); // clear interrupt
+    DMA_Init(); // Re-arm DMA channel
+
+  }
+ 
+    UART0_ICR_R = UART0_IM_R; // Always sink unhandled interrupts
 }
+
 
 // The Interrupt Service Routine
 // Updated, 4/27/2026, Adding in the "randomness" logic here.
@@ -354,9 +434,9 @@ void GPIOPortF_Handler(void) {
     if (!is_playing) {
        UART_OutString("\r\n[SYSTEM] Button Pressed! Analyzing soul...\r\n");
         
-        // Random Logic
-        // Grab the lower bit of the SysTick timer for a 50/50 chance
-        // If we are currently in the background song (Deck the Halls)
+            // Random Logic
+            // Grab the lower bit of the SysTick timer for a 50/50 chance
+            // If we are currently in the background song (Deck the Halls)
         if ( (current_state >= S_DECK_HALLS && current_state <= S_FA_LA_4) && state_buffer.size == 0) {
             UART_OutString("\r\n[SYSTEM] Analyzing soul...\r\n");
             uint32_t rng_seed = NVIC_ST_CURRENT_R; 
@@ -383,6 +463,7 @@ void GPIOPortF_Handler(void) {
             }
         }
     }
+
 }
 
 //// ===============================================
@@ -559,26 +640,41 @@ SongState FSM_Tick(SongState current) {
 //// Main
 //// ===============================================
 int main(void) {
-    __asm("    CPSIE  I");  // Enable Interrupts
-    Init_All();             // PWM/LEDs
-    UART_Init();            // UART Initialization
-    PortF_Init_Buttons();   // Button + Interrupt Setup
+    __asm("    CPSIE  I");      // Enable Interrupts
+    Init_All();     
+             // PWM/LEDs
+    UART_Init();
+    PortF_Init_Buttons();       // Button + Interrupt Setup
     // Old: init_buffer(&state_buffer, 10);
     init_buffer(&state_buffer);
     // Start SysTick now so it's "randomizing" in the background
-    NVIC_ST_RELOAD_R = 0x00FFFFFF;  // Max 24-bit value
-    NVIC_ST_CURRENT_R = 0;          // Clear current to start count
-    NVIC_ST_CTRL_R = 0x05;          // Enable timer, core clock
+    NVIC_ST_RELOAD_R = 0x00FFFFFF; // Max 24-bit value
+    NVIC_ST_CURRENT_R = 0;        // Clear current to start count
+    NVIC_ST_CTRL_R = 0x05;        // Enable timer, core clock
 
     while (1) {
+
+        #if DMA_DEBUG == 1 // Output  DMA messages
+
+            if (UDMA_ENASET_R) { //UDMA_ENASET_R UDMA_DMAREQMASKSET_R
+                UART_OutString("\r\nDMA OK\r\n");
+            }
+
+            if (UDMA_DMAERRCLR_R) {
+                UART_OutString("\r\nDMA ERROR\r\n");
+            }
+
+        #endif
+
         // If we aren't paused, keep the music moving
-        if (!is_paused) { 
-            current_state = FSM_Tick(current_state);
+      if (!is_paused) { 
+         current_state = FSM_Tick(current_state);
         
-            // check the input buffer for new states and overwrite if neccesary
-            if (state_buffer.size > 0) {
-                current_state = pop_buffer(&state_buffer);
-            } 
-        }
+        // check the input buffer for new states and overwrite if neccesary
+        // Also check if the we are in DECK_THE_HALLS so we let every state finish
+          if (state_buffer.size > 0 &&  current_state < 20) {
+            current_state = pop_buffer(&state_buffer);
+          } 
+      }
     }
 }
