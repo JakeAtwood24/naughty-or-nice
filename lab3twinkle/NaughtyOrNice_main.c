@@ -23,10 +23,13 @@
 #define SYSCTL_RCGCPWM_R (*((volatile uint32_t *)0x400FE640))   // PWM clock
 
 // GPIO Port B registers (base: 0x40005000)
+// Jake added bottom 2 for more lights
 #define GPIO_PORTB_AFSEL_R (*((volatile uint32_t *)0x40005420)) // Alt function
 #define GPIO_PORTB_DEN_R (*((volatile uint32_t *)0x4000551C))   // Digital enable
 #define GPIO_PORTB_AMSEL_R (*((volatile uint32_t *)0x40005528)) // Analog mode
 #define GPIO_PORTB_PCTL_R (*((volatile uint32_t *)0x4000552C))  // Port control
+#define GPIO_PORTB_DATA_R (*((volatile uint32_t *)0x400053FC))
+#define GPIO_PORTB_DIR_R  (*((volatile uint32_t *)0x40005400))  // Direction register
 
 // Andy's Modification
 // GPIO Port E (External LEDs on PE0, PE1, PE2, PE3)
@@ -93,11 +96,18 @@
 #define SYSCLK_HZ 16000000 // 16 MHz default clock (no PLL)
 
 // Andy's Modification
+// Jake Update for 10 lights
 // LED bitmask patterns
-#define LED1 0x01 // PE0
-#define LED2 0x02 // PE1
-#define LED3 0x04 // PE2
-#define LED4 0x08 // PE3
+#define LED1  0x001 // PE0
+#define LED2  0x002 // PE1
+#define LED3  0x004 // PE2
+#define LED4  0x008 // PE3
+#define LED5  0x010 // PE4
+#define LED6  0x020 // PE5
+#define LED7  0x040 // PB0
+#define LED8  0x080 // PB1
+#define LED9  0x100 // PB2
+#define LED10 0x200 // PB3
 #define ALL_OFF 0x00
 //Sara's Modfifications
 #define SW1 0x10
@@ -216,23 +226,34 @@ void Init_All(void) {
     SYSCTL_RCGCGPIO_R |= 0x12; 
     while ((SYSCTL_RCGCGPIO_R & 0x12) == 0) {} // Wait for clock to stabilize
 
-    // Configure Port E for LEDs (PE0-PE3)
-    GPIO_PORTE_AMSEL_R &= ~0x0F;        // Disable analog 
-    GPIO_PORTE_AFSEL_R &= ~0x0F;        // Regular GPIO mode
-    GPIO_PORTE_PCTL_R  &= ~0x0000FFFF;  // Clear PCTL for PE0-PE3
-    GPIO_PORTE_DIR_R   |= 0x0F;         // Set as output
-    GPIO_PORTE_DEN_R   |= 0x0F;         // Enable digital
+    // Configure Port E for LEDs (PE0-PE5)
+    GPIO_PORTE_AMSEL_R &= ~0x3F;        // Disable analog on PE0-PE5
+    GPIO_PORTE_AFSEL_R &= ~0x3F;        // Regular GPIO mode
+    GPIO_PORTE_PCTL_R  &= ~0x00FFFFFF;  // Clear PCTL for PE0-PE5
+    GPIO_PORTE_DIR_R   |= 0x3F;         // Set as output
+    GPIO_PORTE_DEN_R   |= 0x3F;         // Enable digital
     
-    // Configure Port B for PWM (PB6)
+    // Configure Port B: PB0-PB3 as GPIO LEDs, PB6 as PWM
     SYSCTL_RCGCPWM_R |= 0x01;
-    GPIO_PORTB_AFSEL_R |= 0x40;
-    GPIO_PORTB_PCTL_R = (GPIO_PORTB_PCTL_R & 0xF0FFFFFF) | 0x04000000;
-    GPIO_PORTB_DEN_R |= 0x40;
+
+    GPIO_PORTB_AMSEL_R &= ~0x0F;        // Disable analog on PB0-PB3
+    GPIO_PORTB_AFSEL_R &= ~0x0F;        // Regular GPIO for PB0-PB3
+    GPIO_PORTB_AFSEL_R |=  0x40;        // Alt function for PB6 (PWM)
+    GPIO_PORTB_PCTL_R = (GPIO_PORTB_PCTL_R & 0xF0FFFF00) | 0x04000000; // PWM on PB6, clear PB0-PB3
+    GPIO_PORTB_DIR_R   |= 0x0F;         // PB0-PB3 output
+    GPIO_PORTB_DEN_R   |= 0x4F;         // Digital enable PB0-PB3 and PB6
 
     // PWM Setup
     PWM0_0_CTL_R = 0;
     PWM0_0_GENA_R = 0x8C;
     PWM0_0_CTL_R = 1;
+}
+
+// Jake Modification
+// Helper to write a 10-bit led_mask to both ports
+static inline void set_leds(uint32_t led_mask) {
+    GPIO_PORTE_DATA_R = (led_mask & 0x3F);         // PE5:PE0
+    GPIO_PORTB_DATA_R = (led_mask >> 6) & 0x0F;    // PB3:PB0
 }
 
 // Andy's Modifications
@@ -369,12 +390,13 @@ void GPIOPortF_Handler(void) {
 //// ===============================================
 // Andy's Modified
 // keynum is piano key number, dur is duration in seconds
+// Jake Modified to use new set_leds() helper
 void note(int keynum, float dur, uint32_t led_mask) {
     uint32_t freq  = (uint32_t)(440.0 * pow(2.0, (keynum - 49) / 12.0));
     uint32_t total_ticks = (uint32_t)(dur * SYSCLK_HZ);
 
     // LEDs and Frequency
-    GPIO_PORTE_DATA_R = led_mask; 
+    set_leds(led_mask);
     PWM0_0_LOAD_R = (SYSCLK_HZ / freq) - 1;
     PWM0_0_CMPA_R = PWM0_0_LOAD_R / 2;
     PWM0_ENABLE_R |= 0x01; // Ensure sound is on
@@ -391,26 +413,27 @@ void note(int keynum, float dur, uint32_t led_mask) {
         } else {
             // Stay in this loop until is_paused is toggled by the ISR
             PWM0_ENABLE_R &= ~0x01;
-            GPIO_PORTE_DATA_R = 0;
+            set_leds(ALL_OFF);
             while (is_paused); 
             
             // Restore hardware state on resume
             PWM0_ENABLE_R |= 0x01;
-            GPIO_PORTE_DATA_R = led_mask;
+            set_leds(led_mask);
         }
     }
 
     // Silence in between notes
-    GPIO_PORTE_DATA_R = 0;
+    set_leds(ALL_OFF);
     PWM0_ENABLE_R &= ~0x01;
     SysTick_Wait((uint32_t)(0.05f * SYSCLK_HZ));
 }
 
 // Jake Modified Rest Function
 // Since 0 doesn't work as a "rest" when passed through the note function had to make a rest function.
+// Jake Modified to use new set_leds() helper
 void rest(float dur) {
     PWM0_ENABLE_R &= ~0x01; // Turn off sound
-    GPIO_PORTE_DATA_R = 0;  // LEDs off
+    set_leds(ALL_OFF);  // LEDs off
 
     SysTick_Wait((uint32_t)(dur * SYSCLK_HZ));
 }
@@ -421,110 +444,110 @@ void rest(float dur) {
 SongState FSM_Tick(SongState current) {
     switch (current) {
         case S_DECK_HALLS:
-            note(note_G, DOT_Q, LED1); note(note_F, EIGHTH, LED2);
-            note(note_E, QUARTER, LED3); note(note_D, QUARTER, LED4);
-            note(note_C, QUARTER, LED1); note(note_D, QUARTER, LED2);
-            note(note_E, QUARTER, LED3); note(note_C, QUARTER, LED4);
+            note(note_G, DOT_Q, LED1|LED6); note(note_F, EIGHTH, LED2|LED7);
+            note(note_E, QUARTER, LED3|LED8); note(note_D, QUARTER, LED4|LED9);
+            note(note_C, QUARTER, LED1|LED10); note(note_D, QUARTER, LED2|LED6);
+            note(note_E, QUARTER, LED3|LED7); note(note_C, QUARTER, LED4|LED8);
             return S_FA_LA_1;
 
         case S_FA_LA_1:
-            note(note_D, EIGHTH, LED1|LED2); note(note_E, EIGHTH, LED3|LED4);
-            note(note_F, EIGHTH, LED1|LED2); note(note_D, EIGHTH, LED3|LED4);
-            note(note_E, DOT_Q, LED1|LED2|LED3|LED4); note(note_D, EIGHTH, LED1|LED2|LED3|LED4);
-            note(note_C, QUARTER, LED1); note(note_LB, QUARTER, LED2);
-            note(note_C, QUARTER, LED1|LED3);
+            note(note_D, EIGHTH, LED1|LED2|LED6|LED7); note(note_E, EIGHTH, LED3|LED4|LED8|LED9);
+            note(note_F, EIGHTH, LED1|LED2|LED6|LED7); note(note_D, EIGHTH, LED3|LED4|LED8|LED9);
+            note(note_E, DOT_Q, LED1|LED2|LED3|LED4|LED5|LED6|LED7|LED8|LED9|LED10); note(note_D, EIGHTH, LED1|LED2|LED3|LED4|LED5|LED6|LED7|LED8|LED9|LED10);
+            note(note_C, QUARTER, LED1|LED5); note(note_LB, QUARTER, LED2|LED6);
+            note(note_C, QUARTER, LED1|LED3|LED7|LED9);
             return S_TIS_SEASON;
 
         case S_TIS_SEASON:
             // Same melody as Deck the Halls
-            note(note_G, DOT_Q, LED1); note(note_F, EIGHTH, LED2);
-            note(note_E, QUARTER, LED3); note(note_D, QUARTER, LED4);
-            note(note_C, QUARTER, LED1); note(note_D, QUARTER, LED2);
-            note(note_E, QUARTER, LED3); note(note_C, QUARTER, LED4);
+            note(note_G, DOT_Q, LED1|LED6); note(note_F, EIGHTH, LED2|LED7);
+            note(note_E, QUARTER, LED3|LED8); note(note_D, QUARTER, LED4|LED9);
+            note(note_C, QUARTER, LED1|LED10); note(note_D, QUARTER, LED2|LED6);
+            note(note_E, QUARTER, LED3|LED7); note(note_C, QUARTER, LED4|LED8);
             return S_FA_LA_2;
 
         case S_FA_LA_2:
             // Repeats the Fa-La-La phrase
-            note(note_D, EIGHTH, LED1|LED2); note(note_E, EIGHTH, LED3|LED4);
-            note(note_F, EIGHTH, LED1|LED2); note(note_D, EIGHTH, LED3|LED4);
-            note(note_E, DOT_Q, LED1|LED2|LED3|LED4); note(note_D, EIGHTH, LED1|LED2|LED3|LED4);
-            note(note_C, QUARTER, LED1); note(note_LB, QUARTER, LED2);
-            note(note_C, QUARTER, LED1|LED3);
+            note(note_D, EIGHTH, LED1|LED2|LED6|LED7); note(note_E, EIGHTH, LED3|LED4|LED8|LED9);
+            note(note_F, EIGHTH, LED1|LED2|LED6|LED7); note(note_D, EIGHTH, LED3|LED4|LED8|LED9);
+            note(note_E, DOT_Q, LED1|LED2|LED3|LED4|LED5|LED6|LED7|LED8|LED9|LED10); note(note_D, EIGHTH, LED1|LED2|LED3|LED4|LED5|LED6|LED7|LED8|LED9|LED10);
+            note(note_C, QUARTER, LED1|LED5); note(note_LB, QUARTER, LED2|LED6);
+            note(note_C, QUARTER, LED1|LED3|LED7|LED9);
             return S_DON_WE_NOW;
 
         case S_DON_WE_NOW:
-            note(note_D, DOT_Q, LED1); note(note_E, EIGHTH, LED2);
-            note(note_F, QUARTER, LED3); note(note_D, QUARTER, LED4);
-            note(note_E, DOT_Q, LED1); note(note_F, EIGHTH, LED2);
-            note(note_G, QUARTER, LED3); note(note_D, QUARTER, LED4);
+            note(note_D, DOT_Q, LED1|LED6); note(note_E, EIGHTH, LED2|LED7);
+            note(note_F, QUARTER, LED3|LED8); note(note_D, QUARTER, LED4|LED9);
+            note(note_E, DOT_Q, LED1|LED6); note(note_F, EIGHTH, LED2|LED7);
+            note(note_G, QUARTER, LED3|LED8); note(note_D, QUARTER, LED4|LED9);
             return S_FA_LA_3;
 
         case S_FA_LA_3:
-            note(note_E, EIGHTH, LED1); note(note_F, EIGHTH, LED2);
-            note(note_G, QUARTER, LED3); note(note_A, EIGHTH, LED4);
-            note(note_B, EIGHTH, LED3); note(note_HC, QUARTER, LED2|LED4);
-            note(note_B, QUARTER, LED1); note(note_A, QUARTER, LED2);
-            note(note_G, HALF, LED1|LED2|LED3|LED4);
+            note(note_E, EIGHTH, LED1|LED6); note(note_F, EIGHTH, LED2|LED7);
+            note(note_G, QUARTER, LED3|LED8); note(note_A, EIGHTH, LED4|LED9);
+            note(note_B, EIGHTH, LED3|LED8); note(note_HC, QUARTER, LED2|LED4|LED7|LED9);
+            note(note_B, QUARTER, LED1|LED5); note(note_A, QUARTER, LED2|LED6);
+            note(note_G, HALF, LED1|LED2|LED3|LED4|LED5|LED6|LED7|LED8|LED9|LED10);
             return S_TROLL_YULE;
 
         case S_TROLL_YULE:
             // Final repeat of the main theme
-            note(note_G, DOT_Q, LED1); note(note_F, EIGHTH, LED2);
-            note(note_E, QUARTER, LED3); note(note_D, QUARTER, LED4);
-            note(note_C, QUARTER, LED1); note(note_D, QUARTER, LED2);
-            note(note_E, QUARTER, LED3); note(note_C, QUARTER, LED4);
+            note(note_G, DOT_Q, LED1|LED6); note(note_F, EIGHTH, LED2|LED7);
+            note(note_E, QUARTER, LED3|LED8); note(note_D, QUARTER, LED4|LED9);
+            note(note_C, QUARTER, LED1|LED10); note(note_D, QUARTER, LED2|LED6);
+            note(note_E, QUARTER, LED3|LED7); note(note_C, QUARTER, LED4|LED8);
             return S_FA_LA_4;
 
         case S_FA_LA_4:
             // Final Fa-La-La
-            note(note_D, EIGHTH, LED1|LED2); note(note_E, EIGHTH, LED3|LED4);
-            note(note_F, EIGHTH, LED1|LED2); note(note_D, EIGHTH, LED3|LED4);
-            note(note_E, DOT_Q, LED1|LED2|LED3|LED4); note(note_D, EIGHTH, LED1|LED2|LED3|LED4);
-            note(note_C, QUARTER, LED1); note(note_LB, QUARTER, LED2);
-            note(note_C, QUARTER, LED1|LED3);
+            note(note_D, EIGHTH, LED1|LED2|LED6|LED7); note(note_E, EIGHTH, LED3|LED4|LED8|LED9);
+            note(note_F, EIGHTH, LED1|LED2|LED6|LED7); note(note_D, EIGHTH, LED3|LED4|LED8|LED9);
+            note(note_E, DOT_Q, LED1|LED2|LED3|LED4|LED5|LED6|LED7|LED8|LED9|LED10); note(note_D, EIGHTH, LED1|LED2|LED3|LED4|LED5|LED6|LED7|LED8|LED9|LED10);
+            note(note_C, QUARTER, LED1|LED5); note(note_LB, QUARTER, LED2|LED6);
+            note(note_C, QUARTER, LED1|LED3|LED7|LED9);
             return S_DECK_HALLS; // Loop back to start
 
         case S_GRINCH_1: // "You're a mean one..."
-            note(note_F,  EIGHTH * GRINCH_TEMPO, LED1); note(note_G,  EIGHTH * GRINCH_TEMPO, LED2);
-            note(note_A, EIGHTH * GRINCH_TEMPO, LED3); rest(QUARTER);
-            note(note_D,  DOT_Q * GRINCH_TEMPO, LED4);
+            note(note_F,  EIGHTH * GRINCH_TEMPO, LED1|LED10); note(note_G,  EIGHTH * GRINCH_TEMPO, LED2|LED9);
+            note(note_A, EIGHTH * GRINCH_TEMPO, LED3|LED8); rest(QUARTER);
+            note(note_D,  DOT_Q * GRINCH_TEMPO, LED4|LED7);
             return S_GRINCH_2;
 
         case S_GRINCH_2: // "...Mr. Grinch"
-            note(note_F,  EIGHTH * GRINCH_TEMPO, LED2); note(note_A, EIGHTH * GRINCH_TEMPO, LED3|LED4);
-            note(note_G,  DOT_Q * GRINCH_TEMPO, LED1); rest(HALF);
+            note(note_F,  EIGHTH * GRINCH_TEMPO, LED2|LED9); note(note_A, EIGHTH * GRINCH_TEMPO, LED3|LED4|LED7|LED8);
+            note(note_G,  DOT_Q * GRINCH_TEMPO, LED1|LED5); rest(HALF);
             return S_GRINCH_3;
 
         case S_GRINCH_3: // "You really are a heel"
-            note(note_D,  EIGHTH * GRINCH_TEMPO, LED1); note(note_A, DOT_Q * GRINCH_TEMPO, LED2);
-            note(note_A,  EIGHTH * GRINCH_TEMPO, LED3); note(note_B,  DOT_Q * GRINCH_TEMPO, LED4);
-            note(note_B, EIGHTH * GRINCH_TEMPO, LED1|LED2|LED3|LED4); note(note_HCS, HALF * GRINCH_TEMPO, LED1|LED2|LED3|LED4);
+            note(note_D,  EIGHTH * GRINCH_TEMPO, LED1|LED10); note(note_A, DOT_Q * GRINCH_TEMPO, LED2|LED9);
+            note(note_A,  EIGHTH * GRINCH_TEMPO, LED3|LED8); note(note_B,  DOT_Q * GRINCH_TEMPO, LED4|LED7);
+            note(note_B, EIGHTH * GRINCH_TEMPO, LED1|LED2|LED3|LED4|LED5|LED6|LED7|LED8|LED9|LED10); note(note_HCS, HALF * GRINCH_TEMPO, LED1|LED2|LED3|LED4|LED5|LED6|LED7|LED8|LED9|LED10);
             return S_DECK_HALLS;
 
         case S_JINGLE_1: // "Jingle bells, jingle bells,"
-            note(note_E, QUARTER, LED1); note(note_E, QUARTER, LED2);
-            note(note_E, HALF,    LED3|LED4); note(note_E, QUARTER, LED1);
-            note(note_E, QUARTER, LED2); note(note_E, HALF,    LED3|LED4);
+            note(note_E, QUARTER, LED1|LED6); note(note_E, QUARTER, LED2|LED7);
+            note(note_E, HALF,    LED3|LED4|LED8|LED9); note(note_E, QUARTER, LED1|LED6);
+            note(note_E, QUARTER, LED2|LED7); note(note_E, HALF,    LED3|LED4|LED8|LED9);
             return S_JINGLE_2;
 
         case S_JINGLE_2: // "Jingle all the way!"
-            note(note_E, QUARTER, LED1); note(note_G, QUARTER, LED2);
-            note(note_C, QUARTER, LED3); note(note_D, QUARTER, LED4);
-            note(note_E, WHOLE, LED1|LED2|LED3|LED4);
+            note(note_E, QUARTER, LED1|LED6); note(note_G, QUARTER, LED2|LED7);
+            note(note_C, QUARTER, LED3|LED8); note(note_D, QUARTER, LED4|LED9);
+            note(note_E, WHOLE, LED1|LED2|LED3|LED4|LED5|LED6|LED7|LED8|LED9|LED10);
             return S_JINGLE_3;
 
         case S_JINGLE_3: // "Oh what fun it is to ride"
-            note(note_F, QUARTER, LED1|LED2); note(note_F, QUARTER, LED3|LED4);
-            note(note_F, DOT_Q,   LED1|LED2); note(note_F, EIGHTH,  LED3|LED4);
-            note(note_F, QUARTER, LED1|LED2); note(note_E, QUARTER, LED3|LED4);
-            note(note_E, QUARTER, LED1|LED2); note(note_E, EIGHTH,  LED3|LED4);
-            note(note_E, EIGHTH,  LED1|LED2);
+            note(note_F, QUARTER, LED1|LED2|LED6|LED7); note(note_F, QUARTER, LED3|LED4|LED8|LED9);
+            note(note_F, DOT_Q,   LED1|LED2|LED6|LED7); note(note_F, EIGHTH,  LED3|LED4|LED8|LED9);
+            note(note_F, QUARTER, LED1|LED2|LED6|LED7); note(note_E, QUARTER, LED3|LED4|LED8|LED9);
+            note(note_E, QUARTER, LED1|LED2|LED6|LED7); note(note_E, EIGHTH,  LED3|LED4|LED8|LED9);
+            note(note_E, EIGHTH,  LED1|LED2|LED6|LED7);
             return S_JINGLE_4;
 
         case S_JINGLE_4: // "In a one-horse open sleigh!"
-            note(note_G, QUARTER, LED1); note(note_G, QUARTER, LED2);
-            note(note_F, QUARTER, LED3); note(note_D, QUARTER, LED4);
-            note(note_C, DOT_H, LED1|LED2|LED3|LED4);
+            note(note_G, QUARTER, LED1|LED6); note(note_G, QUARTER, LED2|LED7);
+            note(note_F, QUARTER, LED3|LED8); note(note_D, QUARTER, LED4|LED9);
+            note(note_C, DOT_H, LED1|LED2|LED3|LED4|LED5|LED6|LED7|LED8|LED9|LED10);
             return S_DECK_HALLS;
 
         default:
