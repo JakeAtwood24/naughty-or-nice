@@ -66,7 +66,11 @@ The Tiva board and breadboard setup were placed inside of a 3D-printed box we cr
 
 ## Software Design
 
+### Audio/Light Setup
+
 To start, we used an old `note()` function that utilized `PWM` to play audio, and modified it to also pass a light value through. We set up pins `PB0-PB2` and `PE0-PE5` for light output, and `PB6` for audio output. Then, we created each of the songs using the `note()` function alongside `SysTick` and a light helper function `set_leds()`.  From there, we broke each song down into small sections to be put into the `FSM`.
+
+### FSM
 
 <p align="center">
   <img src="assets/fsm.jpeg" width="400"/>
@@ -75,6 +79,8 @@ To start, we used an old `note()` function that utilized `PWM` to play audio, an
 </p>
 
 The `FSM` loops through the idle states (The "Deck the Halls" states), until the button is pressed and a quasi-random value function is called. From there the value determines if you are "Naughty" or "Nice" and it plays the corresponding song/light show. After the selected song is over, it returns to looping the idle state.
+
+### UART/DMA
 
 <p align="center">
   <img src="assets/serial console.jpeg" width="400"/>
