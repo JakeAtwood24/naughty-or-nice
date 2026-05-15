@@ -31,7 +31,7 @@ We were also required to deliver:
 ### Wiring
 
 <p align="center">
-  <img src="images/breadboard.jpeg" width="400"/>
+  <img src="assets/breadboard.jpeg" width="400"/>
   <br>
   <em>The circuit with all of the used components on a breadboard</em>
 </p>
@@ -56,8 +56,8 @@ The ports used for output are:
 ### Physical Design
 
 <p align="center">
-  <img src="images/3d print.jpeg" width="400"/>
-  <img src="images/box inside.jpeg" width="400"/>
+  <img src="assets/3d print.jpeg" width="400"/>
+  <img src="assets/box inside.jpeg" width="400"/>
   <br>
   <em>The 3D printed box, and the final circuit inside of it</em>
 </p>
@@ -69,7 +69,7 @@ The Tiva board and breadboard setup were placed inside of a 3D-printed box we cr
 To start, we used an old `note()` function that utilized `PWM` to play audio, and modified it to also pass a light value through. We set up pins `PB0-PB2` and `PE0-PE5` for light output, and `PB6` for audio output. Then, we created each of the songs using the `note()` function alongside `SysTick` and a light helper function `set_leds()`.  From there, we broke each song down into small sections to be put into the `FSM`.
 
 <p align="center">
-  <img src="images/fsm.jpeg" width="400"/>
+  <img src="assets/fsm.jpeg" width="400"/>
   <br>
   <em>The final FSM design we ended up following</em>
 </p>
@@ -77,7 +77,7 @@ To start, we used an old `note()` function that utilized `PWM` to play audio, an
 The `FSM` loops through the idle states (The "Deck the Halls" states), until the button is pressed and a quasi-random value function is called. From there the value determines if you are "Naughty" or "Nice" and it plays the corresponding song/light show. After the selected song is over, it returns to looping the idle state.
 
 <p align="center">
-  <img src="images/serial console.jpeg" width="400"/>
+  <img src="assets/serial console.jpeg" width="400"/>
   <br>
   <em>The serial console after hitting the on board button 3 times, then using the "g" key</em>
 </p>
